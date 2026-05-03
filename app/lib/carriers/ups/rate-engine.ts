@@ -333,20 +333,27 @@ export function computeUpsLine(
       expectedSurcharges.push({ code: "FSC", name: fscActual.name, expected: 0, actual: fscActual.charge, delta: 0, status: "unresolved" });
       notes.push(`FSC: no fuel rate seeded for ${klass} on ${line.shipment_date}`);
     } else {
+      // The contract's fuel_multiplier captures the customer's negotiated
+      // discount on the published rate (e.g. 0.80 for "20% off"). Same
+      // semantics as DHL: published × multiplier = effective rate.
+      const fuelMultiplier = contract.fuel_multiplier ?? 1;
+      const effectiveRate = fuel.rate * fuelMultiplier;
       const fuelable = line.surcharges.filter((s) => isFuelable(s.code)).reduce((acc, s) => acc + s.charge, 0);
       const base = roundCents(expected_wc + fuelable);
-      const expected = roundCents(base * fuel.rate);
+      const expected = roundCents(base * effectiveRate);
       const delta = roundCents(fscActual.charge - expected);
       let fscStatus = classifyDelta(delta);
 
-      // Cascade detection — FSC rate matches published but base was wrong upstream.
+      // Cascade detection — FSC rate matches published × multiplier but base
+      // was wrong upstream (typical when WC is off and FSC is just inheriting
+      // the wrong base).
       const wcOff = Math.abs(wcDelta) > 0.05;
       const carrierBase = wcActual + fuelable;
       const carrierImpliedRate = carrierBase > 0 ? fscActual.charge / carrierBase : null;
-      const rateMatchesPublished = carrierImpliedRate != null && Math.abs(carrierImpliedRate - fuel.rate) < 0.005;
+      const rateMatchesPublished = carrierImpliedRate != null && Math.abs(carrierImpliedRate - effectiveRate) < 0.005;
       if (fscStatus !== "ok" && wcOff && rateMatchesPublished) {
         fscStatus = "cascade";
-        notes.push(`FSC: rate ${(fuel.rate * 100).toFixed(2)}% applied correctly, but base was wrong upstream`);
+        notes.push(`FSC: effective rate ${(effectiveRate * 100).toFixed(2)}% applied correctly, but base was wrong upstream`);
       }
       expectedSurcharges.push({ code: "FSC", name: fscActual.name, expected, actual: fscActual.charge, delta, status: fscStatus });
     }

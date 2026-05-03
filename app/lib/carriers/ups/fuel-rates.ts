@@ -1,50 +1,80 @@
-// UPS Germany fuel surcharge rates. UPS calls the row "FSC" (Fuel Surcharge)
-// in the billing CSV. Two service classes:
-//   - AIR    — Worldwide Express, Express Saver, Express Plus, Express 12:00,
-//              Worldwide Expedited, WW Economy DDU/DDP. Driven by US Gulf
-//              Coast jet-fuel prices (2-week lag per UPS docs).
-//   - GROUND — UPS Standard, Domestic Standard. Driven by EU Commission
-//              Directorate General for Energy diesel prices, weekly.
+// UPS Germany fuel surcharge rates (PUBLISHED tariff). Each contract may
+// negotiate a percent-off discount that the engine applies via
+// `Contract.fuel_multiplier` (e.g. 0.80 for "20% off"). The audit therefore
+// computes:
 //
-// Like DHL (and per the calendar-month note we discovered for DHL fuel),
-// rates may not change strictly on Monday. UPS publishes new rates weekly
-// but the actual billed rate trails the published one slightly. So we key
-// by `effective_from` (an ISO date), not ISO week.
+//   expected_FSC = base × published_rate × fuel_multiplier
 //
-// IMPORTANT: This file is seeded from the implied rates we backed out of
-// real everstox billings (FSC / (WC + fuelable surcharges)) since the UPS
-// public fuel-surcharge page wouldn't load via WebFetch. As more billings
-// flow in, refine each entry to match the median observed rate. The
-// scripts/derive_ups_fuel_rates.ts tool prints the per-month medians.
+// where base = freight charge + Σ fuelable accessorials, mirroring the DHL
+// fuel formula. This split lets us put the same rate table in front of every
+// customer and capture per-customer discounts in the Contract row.
+//
+// Two service classes per UPS:
+//   GROUND — applies to UPS Standard / Dom. Standard. Indexed against EU
+//            diesel prices (Oil Bulletin), updated Mondays. Includes a
+//            Germany toll adjustment per the 3-Dec-2023 note in the source.
+//   AIR    — applies to all Express services AND Expedited Service. Indexed
+//            against US Gulf Coast jet fuel, updated Mondays. The published
+//            page splits "within EU" vs "outside EU" but the rates are
+//            identical in every row so one entry per week suffices.
+//
+// Source: UPS Germany Fuel Surcharge page (https://www.ups.com/de/en/support/
+//         shipping-support/shipping-costs-rates/fuel-surcharges) saved to PDF
+//         and read on 2026-05-03. Rolling 90-day history below; older rates
+//         are placeholders we keep the engine from blowing up on shipments
+//         dated before our published-history cutoff.
 
 export type UpsFuelClass = "AIR" | "GROUND";
 
 export interface UpsFuelRateEntry {
-  effective_from: string; // ISO date (inclusive) — applies until superseded
-  rate: number;           // decimal, e.g. 0.18 = 18%
-  source: string;         // human-readable provenance for audit traceability
+  effective_from: string; // ISO date (inclusive). Each Monday in UPS's table.
+  rate: number;           // decimal, e.g. 0.2975 = 29.75%
+  source: string;
 }
 
+// Each entry is published rate (PRE-discount). Per-contract discount applied
+// in the engine via fuel_multiplier.
 export const UPS_FUEL_RATES: Record<UpsFuelClass, UpsFuelRateEntry[]> = {
-  // GROUND — Standard / Domestic Standard. Implied medians from billings:
-  //   2025-12 → 17.65%, 2026-01 → 17.60%, 2026-02 → 18.01%, 2026-03 → 17.79%.
-  // Stable around 17.5–18.0% in this window. Slot in the median as a single
-  // ~3-month entry; refine if drift appears.
+  // GROUND — UPS Standard, Dom. Standard (Treibstoffzuschlag Boden).
+  // Older history (pre Feb 2026) is back-fitted from invoice-derived medians
+  // since the public page only retains a rolling 90 days.
   GROUND: [
-    { effective_from: "2025-12-01", rate: 0.1765, source: "median of everstox billings 2025-12" },
-    { effective_from: "2026-01-01", rate: 0.1760, source: "median of everstox billings 2026-01" },
-    { effective_from: "2026-02-01", rate: 0.1801, source: "median of everstox billings 2026-02" },
-    { effective_from: "2026-03-01", rate: 0.1779, source: "median of everstox billings 2026-03" },
-    { effective_from: "2026-04-01", rate: 0.1780, source: "extrapolation — confirm against Apr billings" },
+    // Pre-90-day history: best-effort placeholders. Refine when older
+    // billings come in.
+    { effective_from: "2025-12-01", rate: 0.2200, source: "extrapolated — pre-history" },
+    { effective_from: "2026-01-01", rate: 0.2200, source: "extrapolated — pre-history" },
+    // Published 90-day history (read 2026-05-03):
+    { effective_from: "2026-02-09", rate: 0.2225, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-02-16", rate: 0.2250, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-02-23", rate: 0.2250, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-02", rate: 0.2200, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-09", rate: 0.2225, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-16", rate: 0.2275, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-23", rate: 0.2550, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-30", rate: 0.2875, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-06", rate: 0.2975, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-13", rate: 0.3000, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-20", rate: 0.3075, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-27", rate: 0.3075, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-05-04", rate: 0.2975, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
   ],
-  // AIR — Worldwide services. Sparse sample in everstox dataset (≤2 lines per
-  // month) so these are placeholders. Update once we have more AIR billings.
+  // AIR — All Express + Expedited services.
   AIR: [
-    { effective_from: "2025-12-01", rate: 0.2718, source: "1 sample, low confidence" },
-    { effective_from: "2026-01-01", rate: 0.2423, source: "1 sample, low confidence" },
-    { effective_from: "2026-02-01", rate: 0.2700, source: "extrapolation" },
-    { effective_from: "2026-03-01", rate: 0.3300, source: "2 samples, mean of 32.88%" },
-    { effective_from: "2026-04-01", rate: 0.3200, source: "extrapolation — confirm" },
+    { effective_from: "2025-12-01", rate: 0.3275, source: "extrapolated — pre-history" },
+    { effective_from: "2026-01-01", rate: 0.3275, source: "extrapolated — pre-history" },
+    { effective_from: "2026-02-09", rate: 0.3275, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-02-16", rate: 0.3225, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-02-23", rate: 0.3225, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-02", rate: 0.3400, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-09", rate: 0.3525, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-16", rate: 0.4050, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-23", rate: 0.4350, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-03-30", rate: 0.4825, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-06", rate: 0.4800, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-13", rate: 0.4850, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-20", rate: 0.4975, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-04-27", rate: 0.4800, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
+    { effective_from: "2026-05-04", rate: 0.4975, source: "ups.com fuel surcharge page (PDF dated 2026-05-03)" },
   ],
 };
 
