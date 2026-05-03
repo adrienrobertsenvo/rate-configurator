@@ -34,10 +34,16 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   // DHL Express contract AND a UPS contract; the toggle lets you slice either
   // way. URL value is the carrier "family" (lowercase): "dhl" matches any
   // DHL-EXPRESS-* code, "ups" matches UPS-*. "all" or absent → no filter.
-  const carrierFilter: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
+  const carrierFilter = (carrierParam === "dhl" || carrierParam === "ups") ? carrierParam : "all" as "all" | "dhl" | "ups";
+  // Match Contract.carrier via prefix. UPS contracts use "UPS-DE" / "UPS-GB",
+  // DHL uses "DHL-EXPRESS-DE" / etc. Lowercase tags ("dhl-express", "ups")
+  // also match because we check both.
   const carrierWhere = carrierFilter === "all"
     ? {}
-    : { contract: { carrier: { startsWith: carrierFilter === "dhl" ? "DHL-EXPRESS" : "UPS" } } };
+    : { contract: { OR: [
+        { carrier: { startsWith: carrierFilter === "dhl" ? "DHL-EXPRESS" : "UPS-" } },
+        { carrier: carrierFilter === "dhl" ? "dhl-express" : "ups" },
+      ] } };
   // ?product=S, ?surcharge=NX, ?status=over all narrow the shipments-view blocks
   // and drive the visual selection in the analytics + status pills. Independent
   // filters, applied as AND. Default status = "flagged" (over+under+unresolved+
@@ -242,14 +248,11 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <Nav active="invoices" customer={customer?.code ?? null} />
+      <Nav active="invoices" customer={customer?.code ?? null} carrier={carrierFilter} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-lg font-semibold">Invoices</h1>
-              <CarrierTabs active={carrierFilter} customer={customer?.code ?? null} />
-            </div>
+            <h1 className="text-lg font-semibold">Invoices</h1>
             <UploadInvoice
               contracts={contracts.map((c) => {
                 let aliases: string[] = [];
@@ -419,36 +422,8 @@ function buildShipmentsHref(customerCode: string | null, opts: { product?: strin
   return `/invoices?${params.toString()}`;
 }
 
-// Carrier toggle: All / DHL / UPS. Stays at the top of the page (next to the
-// "Invoices" title) so it's always visible regardless of which view is active.
-function CarrierTabs({ active, customer }: { active: "all" | "dhl" | "ups"; customer: string | null }) {
-  const items: ReadonlyArray<readonly [string, string, string]> = [
-    ["all", "All",  "bg-gray-100 text-gray-800 hover:bg-gray-200"],
-    ["dhl", "DHL",  "bg-amber-50 text-amber-900 hover:bg-amber-100"],
-    ["ups", "UPS",  "bg-stone-100 text-stone-900 hover:bg-stone-200"],
-  ];
-  function href(c: string): string {
-    const params = new URLSearchParams();
-    if (customer) params.set("customer", customer);
-    if (c !== "all") params.set("carrier", c);
-    const qs = params.toString();
-    return `/invoices${qs ? `?${qs}` : ""}`;
-  }
-  return (
-    <div className="flex gap-1 text-xs" role="tablist" aria-label="Carrier filter">
-      {items.map(([code, label, cls]) => (
-        <Link
-          key={code}
-          href={href(code)}
-          className={`px-2.5 py-1 rounded font-medium ${cls} ${active === code ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
-          title={code === "all" ? "All carriers" : `Show only ${label} invoices`}
-        >
-          {label}
-        </Link>
-      ))}
-    </div>
-  );
-}
+// Carrier toggle previously lived here; now in the global Nav (CarrierPicker)
+// so it persists across pages.
 
 // Status filter pills — same six options as the per-invoice page, so the
 // shipments view across all invoices behaves the same way the audit-status

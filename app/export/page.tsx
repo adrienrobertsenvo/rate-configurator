@@ -8,14 +8,21 @@ import { Nav } from "../components/Nav";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ contract?: string; customer?: string }>;
+  searchParams: Promise<{ contract?: string; customer?: string; carrier?: string }>;
 }
 
 export default async function ExportPage({ searchParams }: Props) {
-  const { contract: contractParam, customer: customerParam } = await searchParams;
+  const { contract: contractParam, customer: customerParam, carrier: carrierParam } = await searchParams;
+  const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const contractId = contractParam ? Number(contractParam) : null;
 
-  const contracts = await db.contract.findMany({ orderBy: { id: "asc" }, select: { id: true, name: true } });
+  const carrierWhere = carrierForNav === "all" ? {} : {
+    OR: [
+      { carrier: { startsWith: carrierForNav === "dhl" ? "DHL-EXPRESS" : "UPS-" } },
+      { carrier: carrierForNav === "dhl" ? "dhl-express" : "ups" },
+    ],
+  };
+  const contracts = await db.contract.findMany({ where: carrierWhere, orderBy: { id: "asc" }, select: { id: true, name: true } });
   const selected =
     contractId != null
       ? await db.contract.findUnique({
@@ -32,7 +39,7 @@ export default async function ExportPage({ searchParams }: Props) {
   if (!selected) {
     return (
       <>
-        <Nav active="export" customer={customerParam ?? null} />
+        <Nav active="export" customer={customerParam ?? null} carrier={carrierForNav} />
         <main className="p-6">No contracts available.</main>
       </>
     );
@@ -78,7 +85,7 @@ export default async function ExportPage({ searchParams }: Props) {
 
   return (
     <>
-      <Nav active="export" customer={customerParam ?? null} />
+      <Nav active="export" customer={customerParam ?? null} carrier={carrierForNav} />
       <div className="px-4 py-2 bg-white border-b border-gray-200 flex items-center gap-3">
         <span className="text-xs uppercase text-gray-500">Contract:</span>
         <div className="flex gap-2">

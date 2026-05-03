@@ -1,13 +1,24 @@
 import Link from "next/link";
 import { loadCustomers } from "../lib/customer-context";
 import { CustomerPicker } from "./CustomerPicker";
+import { CarrierPicker } from "./CarrierPicker";
 
 // Server component — fetches the customer list once per render so the picker
-// has fresh contract counts.
-export async function Nav({ active, customer }: { active: "contracts" | "invoices" | "zones" | "catalog" | "export" | "simulator" | "rules" | "code-mapping"; customer?: string | null }) {
+// has fresh contract counts. Both the customer and carrier filters live here
+// so every page picks them up via URL params.
+export async function Nav({ active, customer, carrier }: {
+  active: "contracts" | "invoices" | "zones" | "catalog" | "export" | "simulator" | "rules" | "code-mapping";
+  customer?: string | null;
+  carrier?: "all" | "dhl" | "ups" | null;
+}) {
   const customers = await loadCustomers();
   const selected = customer ?? null;
-  const qs = selected ? `?customer=${selected}` : "";
+  const carrierSelected = carrier ?? "all";
+  // Preserve both filters when switching tabs.
+  const params = new URLSearchParams();
+  if (selected) params.set("customer", selected);
+  if (carrierSelected !== "all") params.set("carrier", carrierSelected);
+  const qs = params.toString() ? `?${params.toString()}` : "";
 
   const tab = (id: string, label: string, href: string) => (
     <Link
@@ -26,6 +37,7 @@ export async function Nav({ active, customer }: { active: "contracts" | "invoice
         <span className="text-xs text-gray-500">Carrier contracts → YAML</span>
       </div>
       <div className="flex items-center gap-3 flex-wrap">
+        <CarrierPicker selected={carrierSelected} />
         <CustomerPicker customers={customers} selected={selected} />
         <nav className="flex gap-1 flex-wrap">
           {tab("contracts", "Contracts", "/")}

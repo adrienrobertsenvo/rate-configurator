@@ -21,27 +21,17 @@ async function loadWorkedExample() {
 
 export default async function RulesPage({ searchParams }: { searchParams: Promise<{ customer?: string; carrier?: string }> }) {
   const { customer: customerParam, carrier: carrierParam } = await searchParams;
+  // The Rules page picks one carrier's documentation to render. With the
+  // global CarrierPicker selecting "all", default to DHL since that's the
+  // baseline. The picker is what swaps content here, not local tabs.
   const carrier: "dhl" | "ups" = carrierParam === "ups" ? "ups" : "dhl";
+  const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const example = await loadWorkedExample();
-  function tabHref(c: string) {
-    const params = new URLSearchParams();
-    if (customerParam) params.set("customer", customerParam);
-    if (c !== "dhl") params.set("carrier", c);
-    const qs = params.toString();
-    return `/rules${qs ? `?${qs}` : ""}`;
-  }
   return (
     <>
-      <Nav active="rules" customer={customerParam ?? null} />
+      <Nav active="rules" customer={customerParam ?? null} carrier={carrierForNav} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto prose prose-sm prose-slate">
-          {/* Carrier tabs — same UX as the Invoices page so both surfaces
-              feel consistent. The DHL tab is the default. */}
-          <div className="flex gap-1 text-sm not-prose mb-3">
-            <Link href={tabHref("dhl")} className={`px-3 py-1.5 rounded ${carrier === "dhl" ? "bg-amber-100 text-amber-900 ring-2 ring-blue-400 ring-offset-1" : "bg-amber-50 text-amber-900 hover:bg-amber-100"}`}>DHL Express</Link>
-            <Link href={tabHref("ups")} className={`px-3 py-1.5 rounded ${carrier === "ups" ? "bg-stone-100 text-stone-900 ring-2 ring-blue-400 ring-offset-1" : "bg-stone-50 text-stone-900 hover:bg-stone-100"}`}>UPS</Link>
-          </div>
-
           {carrier === "ups" && <UpsRulesSection />}
           {carrier === "dhl" && <DhlRulesSection example={example} />}
         </div>

@@ -5,15 +5,17 @@ import { Nav } from "./components/Nav";
 import { UploadContract } from "./components/UploadContract";
 import { MergeCandidates } from "./components/MergeCandidates";
 import { resolveCustomer, contractCustomerWhere } from "./lib/customer-context";
+import { resolveCarrier, contractCarrierWhere } from "./lib/carrier-context";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
+export default async function Home({ searchParams }: { searchParams: Promise<{ customer?: string; carrier?: string }> }) {
   await ensureSeed();
-  const { customer: customerParam } = await searchParams;
+  const { customer: customerParam, carrier: carrierParam } = await searchParams;
   const customer = await resolveCustomer(customerParam);
+  const carrier = resolveCarrier(carrierParam);
   const contracts = await db.contract.findMany({
-    where: contractCustomerWhere(customer?.id ?? null),
+    where: { AND: [contractCustomerWhere(customer?.id ?? null), contractCarrierWhere(carrier)] },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -29,7 +31,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ c
 
   return (
     <>
-      <Nav active="contracts" customer={customer?.code ?? null} />
+      <Nav active="contracts" customer={customer?.code ?? null} carrier={carrier} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-4">

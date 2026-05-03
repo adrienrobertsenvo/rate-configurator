@@ -9,14 +9,15 @@ export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ filter?: string; customer?: string; product?: string; surcharge?: string }>;
+  searchParams: Promise<{ filter?: string; customer?: string; product?: string; surcharge?: string; carrier?: string }>;
 }
 
 export default async function InvoiceDetail({ params, searchParams }: Props) {
   const { id } = await params;
   const invoiceId = Number(id);
   if (!Number.isFinite(invoiceId)) notFound();
-  const { filter, customer: customerParam, product: productParam, surcharge: surchargeParam } = await searchParams;
+  const { filter, customer: customerParam, product: productParam, surcharge: surchargeParam, carrier: carrierParam } = await searchParams;
+  const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const productFilter = (productParam ?? "").trim().toUpperCase() || null;
   const surchargeFilter = (surchargeParam ?? "").trim().toUpperCase() || null;
 
@@ -119,7 +120,7 @@ export default async function InvoiceDetail({ params, searchParams }: Props) {
 
   return (
     <>
-      <Nav active="invoices" customer={customerParam ?? null} />
+      <Nav active="invoices" customer={customerParam ?? null} carrier={carrierForNav} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div>
