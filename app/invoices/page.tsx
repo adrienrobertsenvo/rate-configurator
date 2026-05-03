@@ -24,11 +24,20 @@ function customerLabel(name: string): string {
     .trim() || stripped;
 }
 
-export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ customer?: string; view?: string; product?: string; surcharge?: string; status?: string }> }) {
-  const { customer: customerParam, view: viewParam, product: productParam, surcharge: surchargeParam, status: statusParam } = await searchParams;
+export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ customer?: string; view?: string; product?: string; surcharge?: string; status?: string; carrier?: string }> }) {
+  const { customer: customerParam, view: viewParam, product: productParam, surcharge: surchargeParam, status: statusParam, carrier: carrierParam } = await searchParams;
   const customer = await resolveCustomer(customerParam);
   const cWhere = contractCustomerWhere(customer?.id ?? null);
   const view = viewParam === "shipments" ? "shipments" : "invoices";
+
+  // Carrier filter — orthogonal to customer scope. A customer can have both a
+  // DHL Express contract AND a UPS contract; the toggle lets you slice either
+  // way. URL value is the carrier "family" (lowercase): "dhl" matches any
+  // DHL-EXPRESS-* code, "ups" matches UPS-*. "all" or absent → no filter.
+  const carrierFilter: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
+  const carrierWhere = carrierFilter === "all"
+    ? {}
+    : { contract: { carrier: { startsWith: carrierFilter === "dhl" ? "DHL-EXPRESS" : "UPS" } } };
   // ?product=S, ?surcharge=NX, ?status=over all narrow the shipments-view blocks
   // and drive the visual selection in the analytics + status pills. Independent
   // filters, applied as AND. Default status = "flagged" (over+under+unresolved+
@@ -45,10 +54,13 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
       // Customer scope uses Invoice.customerId directly (set at upload time)
       // so customer-only invoices (no contract attached yet, e.g. SWAP) still
       // show up under their customer.
-      where: customer ? { customerId: customer.id } : {},
+      where: {
+        ...(customer ? { customerId: customer.id } : {}),
+        ...carrierWhere,
+      },
       orderBy: { uploadedAt: "desc" },
       include: {
-        contract: { select: { id: true, name: true, customerId: true } },
+        contract: { select: { id: true, name: true, customerId: true, carrier: true } },
         _count: { select: { lines: true } },
       },
     }),
@@ -234,7 +246,10 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-7xl mx-auto space-y-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">Invoices</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-lg font-semibold">Invoices</h1>
+              <CarrierTabs active={carrierFilter} customer={customer?.code ?? null} />
+            </div>
             <UploadInvoice
               contracts={contracts.map((c) => {
                 let aliases: string[] = [];
@@ -329,19 +344,19 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                   <StatusPills
                     counts={statusCounts}
                     active={statusFilter}
-                    hrefFor={(s) => buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge: surchargeFilter, status: s })}
+                    hrefFor={(s) => buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge: surchargeFilter, status: s , carrier: carrierFilter })}
                   />
                   {shipmentAnalytics && (
                     <InvoiceAnalytics
                       a={shipmentAnalytics}
                       scopeLabel={`across ${fmtInt(allLinesForAnalytics.length)} line${allLinesForAnalytics.length === 1 ? "" : "s"} in ${fmtInt(invoices.length)} invoice${invoices.length === 1 ? "" : "s"}`}
                       productNames={shipmentAnalytics.productNames}
-                      productHref={(code) => buildShipmentsHref(customer?.code ?? null, { product: code, surcharge: surchargeFilter, status: statusFilter })}
+                      productHref={(code) => buildShipmentsHref(customer?.code ?? null, { product: code, surcharge: surchargeFilter, status: statusFilter , carrier: carrierFilter })}
                       activeProduct={productFilter}
-                      surchargeHref={(code) => buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge: code, status: statusFilter })}
+                      surchargeHref={(code) => buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge: code, status: statusFilter , carrier: carrierFilter })}
                       activeSurcharge={surchargeFilter}
-                      cellHref={({ surcharge, status }) => buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge, status })}
-                      productCellHref={({ product, status }) => buildShipmentsHref(customer?.code ?? null, { product, surcharge: surchargeFilter, status })}
+                      cellHref={({ surcharge, status }) => buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge, status , carrier: carrierFilter })}
+                      productCellHref={({ product, status }) => buildShipmentsHref(customer?.code ?? null, { product, surcharge: surchargeFilter, status , carrier: carrierFilter })}
                       activeStatus={statusFilter}
                     />
                   )}
@@ -354,17 +369,17 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                           {shipmentAnalytics?.productNames?.[productFilter] && (
                             <span className="text-blue-700">· {shipmentAnalytics.productNames[productFilter]}</span>
                           )}
-                          <Link href={buildShipmentsHref(customer?.code ?? null, { product: null, surcharge: surchargeFilter })} className="text-gray-500 hover:text-rose-600 ml-1">×</Link>
+                          <Link href={buildShipmentsHref(customer?.code ?? null, { product: null, surcharge: surchargeFilter , carrier: carrierFilter })} className="text-gray-500 hover:text-rose-600 ml-1">×</Link>
                         </span>
                       )}
                       {surchargeFilter && (
                         <span className="inline-flex items-center gap-1.5 bg-white border border-blue-200 rounded px-2 py-0.5">
                           <span className="font-mono text-blue-800 font-medium">surcharge = {surchargeFilter}</span>
-                          <Link href={buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge: null })} className="text-gray-500 hover:text-rose-600 ml-1">×</Link>
+                          <Link href={buildShipmentsHref(customer?.code ?? null, { product: productFilter, surcharge: null , carrier: carrierFilter })} className="text-gray-500 hover:text-rose-600 ml-1">×</Link>
                         </span>
                       )}
                       {(productFilter && surchargeFilter) && (
-                        <Link href={buildShipmentsHref(customer?.code ?? null, { product: null, surcharge: null })} className="ml-auto text-blue-700 hover:underline">
+                        <Link href={buildShipmentsHref(customer?.code ?? null, { product: null, surcharge: null , carrier: carrierFilter })} className="ml-auto text-blue-700 hover:underline">
                           clear all
                         </Link>
                       )}
@@ -393,14 +408,46 @@ function SummaryStat({ label, value, cls, hint, sublabel }: { label: string; val
 
 // Build the shipments-view URL preserving the customer scope and toggling the
 // product/surcharge/status filters independently. Pass `null` for any to clear.
-function buildShipmentsHref(customerCode: string | null, opts: { product?: string | null; surcharge?: string | null; status?: string | null }): string {
+function buildShipmentsHref(customerCode: string | null, opts: { product?: string | null; surcharge?: string | null; status?: string | null; carrier?: string | null }): string {
   const params = new URLSearchParams();
   params.set("view", "shipments");
   if (customerCode) params.set("customer", customerCode);
   if (opts.product) params.set("product", opts.product);
   if (opts.surcharge) params.set("surcharge", opts.surcharge);
   if (opts.status && opts.status !== "all") params.set("status", opts.status);
+  if (opts.carrier && opts.carrier !== "all") params.set("carrier", opts.carrier);
   return `/invoices?${params.toString()}`;
+}
+
+// Carrier toggle: All / DHL / UPS. Stays at the top of the page (next to the
+// "Invoices" title) so it's always visible regardless of which view is active.
+function CarrierTabs({ active, customer }: { active: "all" | "dhl" | "ups"; customer: string | null }) {
+  const items: ReadonlyArray<readonly [string, string, string]> = [
+    ["all", "All",  "bg-gray-100 text-gray-800 hover:bg-gray-200"],
+    ["dhl", "DHL",  "bg-amber-50 text-amber-900 hover:bg-amber-100"],
+    ["ups", "UPS",  "bg-stone-100 text-stone-900 hover:bg-stone-200"],
+  ];
+  function href(c: string): string {
+    const params = new URLSearchParams();
+    if (customer) params.set("customer", customer);
+    if (c !== "all") params.set("carrier", c);
+    const qs = params.toString();
+    return `/invoices${qs ? `?${qs}` : ""}`;
+  }
+  return (
+    <div className="flex gap-1 text-xs" role="tablist" aria-label="Carrier filter">
+      {items.map(([code, label, cls]) => (
+        <Link
+          key={code}
+          href={href(code)}
+          className={`px-2.5 py-1 rounded font-medium ${cls} ${active === code ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
+          title={code === "all" ? "All carriers" : `Show only ${label} invoices`}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
+  );
 }
 
 // Status filter pills — same six options as the per-invoice page, so the

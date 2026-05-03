@@ -52,9 +52,31 @@ function asString(v: unknown): string {
   return String(v).trim();
 }
 
+// Some UPS rate sheets (Thomann's notably) store cells as strings with
+// German decimal commas — "5,66" instead of 5.66. Naively stripping commas
+// turns "5,66" into 566, which makes a 5kg rate look like €566. Detect:
+//   - "5,66"           German decimal       → swap comma for dot → 5.66
+//   - "1.234,56"       German thousand+dec  → strip dots, swap comma → 1234.56
+//   - "1,234.56"       US thousand+decimal  → strip commas → 1234.56
+//   - "10000000"       plain integer        → 10000000
 function asNumber(v: unknown): number | null {
   if (v == null || v === "") return null;
-  const s = String(v).replace(/,/g, "");
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  let s = String(v).trim();
+  if (!s) return null;
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  if (lastComma > lastDot) {
+    // Comma is the decimal separator (German). Strip dots (thousand seps),
+    // swap comma for dot.
+    s = s.replace(/\./g, "").replace(/,/g, ".");
+  } else if (lastDot > lastComma) {
+    // Dot is the decimal separator (US). Strip commas (thousand seps).
+    s = s.replace(/,/g, "");
+  } else {
+    // No decimal indicator — strip whatever separator is present.
+    s = s.replace(/[,.]/g, "");
+  }
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
