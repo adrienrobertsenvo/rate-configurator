@@ -1,7 +1,7 @@
 import type { ParsedShipmentRow } from "./invoice-parse";
 import { fuelClassForProduct, lookupFuelRate } from "./fuel-rates";
 import { isFuelable } from "./surcharge-meta";
-import { resolveCountryCode } from "./country-aliases";
+import { resolveCountryCode } from "../../country-aliases";
 import { demandRatePerKg } from "./demand-surcharge";
 
 export interface ContractSnapshot {
