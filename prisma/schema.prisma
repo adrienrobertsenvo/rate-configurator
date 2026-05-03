@@ -1,0 +1,299 @@
+// Prisma schema for Rate Audit and Configurator
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// Customer/account a contract belongs to. Multi-country customers (e.g. Refurbed
+// has DE + FR + GB contracts) point to the SAME Customer. brand_aliases lists
+// billing-account names DHL might bill under for this customer (e.g. "BENUTA
+// GMBH" for BA Logistics) — used by the importer to auto-route invoices.
+model Customer {
+  id            Int        @id @default(autoincrement())
+  name          String     @unique // canonical legal entity, e.g. "BA Logistics GmbH"
+  code          String     @unique // URL slug, e.g. "ba-logistics"
+  display_name  String?              // UI label, e.g. "BA Logistics (benuta)"
+  brand_aliases String?              // JSON array of additional account names
+  contracts     Contract[]
+  invoices      Invoice[]
+
+  @@index([code])
+}
+
+model Contract {
+  id                 Int              @id @default(autoincrement())
+  customerId         Int?             // null = system contract (Standard, UK Customs Standard) — visible across all customers
+  customer           Customer?        @relation(fields: [customerId], references: [id])
+  name               String
+  carrier            String
+  billing_country    String
+  currency_code      String           @default("EUR")
+  weight_unit        String           @default("kg")
+  volumetric_divisor Int              @default(5000)
+  // Multiplier applied to the published fuel rate when computing FF for this
+  // contract. 1.0 = no override (default). Refurbed contracts have "50% off
+  // prevailing fuel" → 0.5. Letters: expected_FF = published_rate × multiplier × base.
+  fuel_multiplier    Float            @default(1.0)
+  // DHL billing-account numbers this contract covers, JSON array of strings
+  // (e.g. ["143224343","953638253"]). Used by the invoice importer to route
+  // CSVs to the right contract — account number is a stricter match than the
+  // billing-account name because one customer can have multiple accounts and
+  // multiple contracts.
+  account_numbers    String?
+  valid_from         String
+  valid_until        String
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  freight            FreightProduct[]
+  addons             Surcharge[]
+  invoices           Invoice[]
+  zoneMaps           ZoneMap[]
+  sources            ContractSource[]
+
+  @@index([carrier, billing_country])
+  @@index([customerId])
+}
+
+// Original source files an extracted contract came from. Lets the user verify
+// that the rate-card PDF (or XLSX/CSV) was adopted correctly, and is also
+// where merge operations stash the upstream document trail.
+model ContractSource {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  filename   String
+  kind       String   // "pdf" | "xlsx" | "csv"
+  size_bytes Int
+  sha256     String?
+  bytes      Bytes? // store the original file so the user can re-download for verification
+  uploadedAt DateTime @default(now())
+
+  @@index([contractId])
+}
+
+model FreightProduct {
+  id              Int            @id @default(autoincrement())
+  contractId      Int
+  contract        Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  name            String
+  price_structure String         @default("zone,weight")
+  zone_group      String         @default("default")
+  order           Int            @default(0)
+  sub_products    SubProduct[]
+
+  @@index([contractId])
+}
+
+model SubProduct {
+  id          Int            @id @default(autoincrement())
+  productId   Int
+  product     FreightProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  codes       String?
+  order       Int            @default(0)
+  bands       PriceBand[]
+
+  @@index([productId])
+}
+
+model PriceBand {
+  id           Int        @id @default(autoincrement())
+  subProductId Int
+  subProduct   SubProduct @relation(fields: [subProductId], references: [id], onDelete: Cascade)
+  zone         String
+  weight_start Int
+  weight_end   Int?
+  price        Float?
+  per_kg       Float?
+  step         Int?
+  order        Int        @default(0)
+  confidence   Float?
+  // When this rate took effect / expires. NULL means "inherits the contract's
+  // validity". When multiple bands cover the same (zone, weight) range, the
+  // engine picks the one valid at the shipment's date (most-specific wins).
+  valid_from   String?    // ISO date "YYYY-MM-DD"
+  valid_until  String?    // ISO date "YYYY-MM-DD"
+
+  @@index([subProductId, zone, order])
+}
+
+model Surcharge {
+  id          Int      @id @default(autoincrement())
+  contractId  Int
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  kind        String
+  amount      Float?
+  // Minimum euro charge for per-kg surcharges. If set, expected = max(amount × weight, min_amount).
+  min_amount  Float?
+  // Optional scope filter when a single billing code (e.g. "OO" Remote Area) maps
+  // to multiple contract rules with different rates. "any" matches all lines;
+  // "domestic" matches Express Domestic; "international" matches Express/Economy export+import.
+  applies_to  String   @default("any")
+  description String?
+
+  @@index([contractId])
+}
+
+model ZoneMap {
+  id              Int           @id @default(autoincrement())
+  carrier         String
+  billing_country String        @default("DE")
+  zone_group      String        @default("default")
+  contractId      Int?
+  contract        Contract?     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  spec_name       String
+  valid_from      String
+  currency_code   String        @default("EUR")
+  countries       CountryZone[]
+
+  @@unique([carrier, billing_country, zone_group, contractId])
+  @@index([carrier, billing_country])
+  @@index([contractId])
+}
+
+model CountryZone {
+  id        Int     @id @default(autoincrement())
+  zoneMapId Int
+  zoneMap   ZoneMap @relation(fields: [zoneMapId], references: [id], onDelete: Cascade)
+  country   String
+  zone      Int
+
+  @@unique([zoneMapId, country])
+  @@index([zoneMapId])
+}
+
+model CatalogProduct {
+  id               Int    @id @default(autoincrement())
+  carrier          String
+  code             String
+  product_name     String
+  sub_product_name String
+  direction        String @default("any") // "export" | "import" | "any"
+
+  @@unique([carrier, code, direction])
+  @@index([carrier])
+}
+
+model CatalogSurcharge {
+  id      Int    @id @default(autoincrement())
+  carrier String
+  code    String
+  name    String
+  kind    String
+
+  @@unique([carrier, code])
+  @@index([carrier])
+}
+
+model TaxRate {
+  id          Int     @id @default(autoincrement())
+  carrier     String
+  code        String
+  rate        Float
+  description String?
+
+  @@unique([carrier, code])
+  @@index([carrier])
+}
+
+model Invoice {
+  id             Int           @id @default(autoincrement())
+  invoice_number String        @unique
+  invoice_date   String
+  contractId     Int?
+  contract       Contract?     @relation(fields: [contractId], references: [id])
+  // Direct customer link, separate from `contract.customerId` so we can scope
+  // invoices to a customer EVEN when no contract is attached yet (e.g. SWAP
+  // Commerce — invoices stored, no DHL Express ratecard yet). Should always
+  // equal contract.customerId when a contract is set; the upload pipeline keeps
+  // them in sync.
+  customerId     Int?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  currency       String        @default("EUR")
+  total_excl_vat Float?
+  // "freight" (default — standard rate-card invoice) or "customs" (UK Duty/VAT
+  // import-clearance invoice). The audit engine routes on this.
+  invoice_type   String        @default("freight")
+  // The original CSV file that was uploaded — kept verbatim for verification
+  // ("did I upload the right file? what did it say in row 17?"). Optional: legacy
+  // invoices loaded before this column don't have it. We store the bytes in DB
+  // for portability with the rest of the SQLite snapshot.
+  source_filename   String?
+  source_size_bytes Int?
+  source_sha256     String?
+  source_bytes      Bytes?
+  uploadedAt     DateTime      @default(now())
+  lines          InvoiceLine[]
+
+  @@index([contractId])
+}
+
+// Free-form messages on a single InvoiceLine — both reviewer questions and
+// Claude's responses. Used to power the per-shipment AI chat.
+model LineMessage {
+  id        Int         @id @default(autoincrement())
+  lineId    Int
+  line      InvoiceLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  role      String      // "user" | "assistant"
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([lineId])
+}
+
+model InvoiceLine {
+  id                       Int     @id @default(autoincrement())
+  invoiceId                Int
+  invoice                  Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  shipment_number          String?
+  shipment_date            String?
+  product_code             String?
+  product_name             String?
+  origin_country           String?
+  dest_country             String?
+  weight_kg                Float?
+  weight_flag              String?
+  declared_value           Float?  // declared customs value (used by II Shipment Insurance)
+  charged_amount           Float?
+  weight_charge            Float?
+  surcharges_json          String?
+  tax_code                 String?
+  total_tax                Float?
+
+  expected_amount          Float?
+  expected_weight_charge   Float?
+  expected_surcharges_json String?
+  expected_tax             Float?
+  delta                    Float?
+  tax_delta                Float?
+  surcharge_delta          Float?
+  audit_status             String?
+  tax_status               String?
+  surcharge_status         String?
+  audit_notes              String?
+  matched_product          String?
+  matched_sub_product      String?
+  matched_zone             String?
+  matched_band_json        String?
+
+  // Reviewer workflow: a colleague triages each audit-flagged line.
+  review_status            String?   // "correct" | "valid_claim" | "dispute" | "other"
+  review_notes             String?
+  reviewer                 String?
+  reviewed_at              DateTime?
+  messages                 LineMessage[]
+
+  @@index([invoiceId])
+  @@index([audit_status])
+  @@index([tax_status])
+  @@index([surcharge_status])
+  @@index([review_status])
+}

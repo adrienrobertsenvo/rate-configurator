@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/app/generated/prisma
+
+# Local SQLite database — contains customer/invoice data + binary CSVs/PDFs
+# stored as `source_bytes` and ContractSource.bytes. Re-derivable from the
+# original files; not source-of-truth. Excluded for both size (~130 MB) and
+# confidentiality.
+dev.db
+dev.db-journal
+dev.db.backup-*
