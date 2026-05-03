@@ -22,3 +22,5 @@ export const ups: CarrierEngine = {
 export { parseUpsInvoiceCsv, normalizeUpsAccount, readUpsAccountNumber } from "./invoice-parse";
 export * from "./surcharge-meta";
 export * from "./rate-engine";
+export { extractContract } from "./extract";
+export type { ExtractedContract, SourceFile } from "./extract";

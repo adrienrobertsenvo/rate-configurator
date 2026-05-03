@@ -293,6 +293,7 @@ export function parseUpsInvoiceCsv(input: Buffer | Uint8Array | string): ParsedI
       surcharges,
       tax_code,
       total_tax,
+      zone: ship.zone,
     });
   }
 

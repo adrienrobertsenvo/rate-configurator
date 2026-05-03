@@ -176,24 +176,38 @@ export function computeUpsLine(
   const productMeta = contract.freight.find((p) => p.name === matchedProduct);
   const zoneGroup = productMeta?.zone_group ?? "default";
   const zones = matchedSub.zones;
-  // Try a few interpretations: the literal zone from the row, the zone-map
-  // lookup by destination country, then fall back to the first zone defined.
+  // Build zone-key candidates. UPS pads zones with leading zeros on the wire
+  // (e.g. "009", "01") while the contract may store them as "Zone 9" or just
+  // "9". Try every reasonable spelling so the lookup succeeds regardless of
+  // which side normalizes.
   const candidateZones: string[] = [];
-  // UPS sometimes pads zones with leading zeros (e.g. "009", "01"). Strip.
-  const lineZone = ((line as ParsedShipmentRow & { zone?: string }).zone ?? "").replace(/^0+/, "") || null;
-  if (lineZone) candidateZones.push(lineZone);
+  const lineZone = (line.zone ?? "").trim();
+  if (lineZone) {
+    candidateZones.push(lineZone);                          // raw, e.g. "009"
+    const stripped = lineZone.replace(/^0+/, "") || "0";    // "9"
+    candidateZones.push(stripped);
+    candidateZones.push(`Zone ${stripped}`);                 // "Zone 9"
+  }
   if (line.dest_country) {
     const map = zoneMaps.byGroup.get(zoneGroup);
     const z = map?.get(line.dest_country.toUpperCase());
-    if (z != null) candidateZones.push(String(z));
+    if (z != null) {
+      candidateZones.push(String(z));
+      candidateZones.push(`Zone ${z}`);
+    }
   }
   let zoneKey: string | null = null;
   for (const candidate of candidateZones) {
     if (zones[candidate]?.length) { zoneKey = candidate; break; }
   }
   if (!zoneKey) {
-    // Fall back to any zone with bands defined — first available.
-    zoneKey = Object.keys(zones).find((z) => zones[z]?.length) ?? null;
+    // No band coverage anywhere for any candidate. Surface the candidates we
+    // tried so the audit_notes column points the operator at the right gap.
+    notes.push(`No zone matched (tried: ${candidateZones.join(", ") || "—"}).`);
+    result.expected_surcharges = line.surcharges.map((s) => ({
+      code: s.code, name: s.name, expected: 0, actual: s.charge, delta: 0, status: "unresolved" as AuditStatus,
+    }));
+    return result;
   }
   if (!zoneKey) {
     notes.push(`No zone matched (tried: ${candidateZones.join(", ") || "—"}).`);
