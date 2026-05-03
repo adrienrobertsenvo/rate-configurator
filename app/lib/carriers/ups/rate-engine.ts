@@ -33,6 +33,8 @@ import type {
   AuditStatus,
   MatchedBand,
 } from "../dhl-express/rate-engine";
+import { isFuelable } from "./surcharge-meta";
+import { lookupUpsFuelRate } from "./fuel-rates";
 
 const TOLERANCE_EUR = 0.05;
 
@@ -143,19 +145,39 @@ export function computeUpsLine(
   }
 
   // Find the FreightProduct/SubProduct whose `codes` list includes this UPS
-  // service code (e.g. "069" → "Worldwide Express Saver"). Same lookup pattern
-  // as DHL but operating on UPS code strings.
-  let matchedSub: { id: number; name: string; codes: string[]; zones: Record<string, Band[]> } | null = null;
-  let matchedProduct: string | null = null;
-  outer: for (const product of contract.freight) {
+  // service code (e.g. "069" → "Worldwide Express Saver"). UPS contracts
+  // typically carry multiple cards per service:
+  //   - Single vs Multi  → governed by package_quantity > 1
+  //   - Export vs Import → governed by direction relative to billing_country
+  // We collect every matching sub-product and rank them so the most-specific
+  // one wins.
+  const billingCountry = contract.billing_country.toUpperCase();
+  const isImport = !!line.origin_country && line.origin_country.toUpperCase() !== billingCountry
+    && !!line.dest_country && line.dest_country.toUpperCase() === billingCountry;
+  const isMulti = (line.package_quantity ?? 1) > 1;
+  type Cand = { sub: typeof contract.freight[number]["sub_products"][number]; productName: string };
+  const candidates: Cand[] = [];
+  for (const product of contract.freight) {
     for (const sub of product.sub_products) {
       if (sub.codes.includes(productCode) || sub.codes.includes(line.product_code ?? "")) {
-        matchedSub = sub;
-        matchedProduct = product.name;
-        break outer;
+        candidates.push({ sub, productName: product.name });
       }
     }
   }
+  // Score: +10 for matching direction, +5 for matching multi/single, otherwise 0.
+  function scoreCandidate(c: Cand): number {
+    const n = c.productName.toLowerCase();
+    let score = 0;
+    if (isImport && n.includes("import")) score += 10;
+    if (!isImport && (n.includes("export") || (!n.includes("import")))) score += 10;
+    if (isMulti && n.includes("multi")) score += 5;
+    if (!isMulti && (n.includes("single") || (!n.includes("multi")))) score += 5;
+    return score;
+  }
+  candidates.sort((a, b) => scoreCandidate(b) - scoreCandidate(a));
+  const best = candidates[0] ?? null;
+  const matchedSub = best?.sub ?? null;
+  const matchedProduct = best?.productName ?? null;
 
   if (!matchedSub) {
     notes.push(`No contract sub-product carries UPS service code '${productCode}'.`);
@@ -209,10 +231,6 @@ export function computeUpsLine(
     }));
     return result;
   }
-  if (!zoneKey) {
-    notes.push(`No zone matched (tried: ${candidateZones.join(", ") || "—"}).`);
-    return result;
-  }
   result.matched_zone = zoneKey;
 
   if (line.weight_kg == null) {
@@ -241,32 +259,120 @@ export function computeUpsLine(
   };
   result.matched_band = matched;
 
-  // Pass surcharges + FSC through as unresolved for now — placeholder until
-  // the surcharge meta and fuel rate logic are populated for UPS.
-  const expectedSurcharges: ExpectedSurcharge[] = line.surcharges.map((s) => ({
-    code: s.code, name: s.name, expected: 0, actual: s.charge, delta: 0, status: "unresolved" as AuditStatus,
-  }));
-  result.expected_surcharges = expectedSurcharges;
-
   const wcActual = line.weight_charge ?? 0;
   const wcDelta = roundCents(wcActual - expected_wc);
   const wcStatus: AuditStatus = classifyDelta(wcDelta);
 
-  // Total expected = WC + surcharges (unresolved, but use actual for now so
-  // delta isolates the WC error). When surcharges are wired up, this becomes
-  // sum of expected.
-  const surchargesActual = line.surcharges.reduce((acc, s) => acc + s.charge, 0);
-  result.expected_total = roundCents(expected_wc + surchargesActual + (line.total_tax ?? 0));
-  result.delta = roundCents((line.charged_amount ?? 0) - (result.expected_total ?? 0));
-  result.surcharge_delta = 0;
-  result.tax_delta = 0;
-  result.surcharge_status = "unresolved";
-  result.tax_status = "unresolved";
+  // ---- Surcharges (per-code audit against contract Surcharge rules) ----
+  // Index contract rules by code, then by name (DHL has the same fallback).
+  const rulesByCode = new Map<string, typeof contract.surcharges>();
+  const ruleByName = new Map<string, typeof contract.surcharges[number]>();
+  for (const r of contract.surcharges) {
+    if (!rulesByCode.has(r.code)) rulesByCode.set(r.code, []);
+    rulesByCode.get(r.code)!.push(r);
+    ruleByName.set(r.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), r);
+  }
+  function resolveRule(code: string, name: string) {
+    const direct = rulesByCode.get(code);
+    if (direct?.length) return direct[0];
+    return ruleByName.get(name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()) ?? null;
+  }
+  function priceSurcharge(rule: typeof contract.surcharges[number], weightKg: number): number | null {
+    if (rule.amount == null) return null;
+    switch (rule.kind) {
+      case "flat":
+      case "per_shipment":
+        return rule.amount;
+      case "per_kg": {
+        if (weightKg == null) return null;
+        const v = rule.amount * weightKg;
+        return rule.min_amount != null ? Math.max(v, rule.min_amount) : v;
+      }
+      case "percent":
+        return wcActual * (rule.amount > 1 ? rule.amount / 100 : rule.amount);
+      default:
+        return null;
+    }
+  }
 
-  // Line-level status: WC status dominates for now since surcharges/fuel/tax
-  // are unresolved by design. Keeps the audit informative without false-flags.
-  if (wcStatus === "ok") result.status = "ok";
-  else result.status = wcStatus;
+  // Pass 1: price every surcharge except FSC (fuel needs the others first).
+  const expectedSurcharges: ExpectedSurcharge[] = [];
+  for (const actual of line.surcharges) {
+    if (actual.code === "FSC") continue;
+    const rule = resolveRule(actual.code, actual.name);
+    if (!rule) {
+      expectedSurcharges.push({
+        code: actual.code, name: actual.name,
+        expected: 0, actual: actual.charge, delta: actual.charge,
+        status: "unresolved",
+      });
+      continue;
+    }
+    const exp = priceSurcharge(rule, line.weight_kg ?? 0);
+    if (exp == null) {
+      expectedSurcharges.push({ code: actual.code, name: rule.name, expected: 0, actual: actual.charge, delta: 0, status: "unresolved" });
+      continue;
+    }
+    const rounded = roundCents(exp);
+    const delta = roundCents(actual.charge - rounded);
+    expectedSurcharges.push({ code: actual.code, name: rule.name, expected: rounded, actual: actual.charge, delta, status: classifyDelta(delta) });
+  }
+
+  // Pass 2: FSC fuel surcharge — rate × (WC + Σ fuelable surcharges).
+  // Use ACTUAL fuelable surcharges (not expected) so a misconfigured RES rule
+  // doesn't cascade into a false FF delta. The FF row's own delta still shows
+  // the standalone fuel error.
+  const fscActual = line.surcharges.find((s) => s.code === "FSC");
+  if (fscActual) {
+    const klass = fuelClassForUpsService(productCode);
+    const fuel = klass && line.shipment_date ? lookupUpsFuelRate(klass, line.shipment_date) : null;
+    if (!klass) {
+      expectedSurcharges.push({ code: "FSC", name: fscActual.name, expected: 0, actual: fscActual.charge, delta: 0, status: "unresolved" });
+      notes.push(`FSC: cannot classify product '${productCode}' as AIR or GROUND`);
+    } else if (!fuel) {
+      expectedSurcharges.push({ code: "FSC", name: fscActual.name, expected: 0, actual: fscActual.charge, delta: 0, status: "unresolved" });
+      notes.push(`FSC: no fuel rate seeded for ${klass} on ${line.shipment_date}`);
+    } else {
+      const fuelable = line.surcharges.filter((s) => isFuelable(s.code)).reduce((acc, s) => acc + s.charge, 0);
+      const base = roundCents(expected_wc + fuelable);
+      const expected = roundCents(base * fuel.rate);
+      const delta = roundCents(fscActual.charge - expected);
+      let fscStatus = classifyDelta(delta);
+
+      // Cascade detection — FSC rate matches published but base was wrong upstream.
+      const wcOff = Math.abs(wcDelta) > 0.05;
+      const carrierBase = wcActual + fuelable;
+      const carrierImpliedRate = carrierBase > 0 ? fscActual.charge / carrierBase : null;
+      const rateMatchesPublished = carrierImpliedRate != null && Math.abs(carrierImpliedRate - fuel.rate) < 0.005;
+      if (fscStatus !== "ok" && wcOff && rateMatchesPublished) {
+        fscStatus = "cascade";
+        notes.push(`FSC: rate ${(fuel.rate * 100).toFixed(2)}% applied correctly, but base was wrong upstream`);
+      }
+      expectedSurcharges.push({ code: "FSC", name: fscActual.name, expected, actual: fscActual.charge, delta, status: fscStatus });
+    }
+  }
+
+  result.expected_surcharges = expectedSurcharges;
+  const surchargeExpectedTotal = expectedSurcharges.reduce((acc, s) => acc + s.expected, 0);
+  const surchargeActualTotal = line.surcharges.reduce((acc, s) => acc + s.charge, 0);
+  result.surcharge_delta = roundCents(surchargeActualTotal - surchargeExpectedTotal);
+  result.surcharge_status = expectedSurcharges.some((s) => s.status === "unresolved") ? "unresolved"
+    : Math.abs(result.surcharge_delta) > 0.05 ? (result.surcharge_delta > 0 ? "over" : "under") : "ok";
+
+  // Total expected = expected WC + expected surcharges + actual tax (UPS tax
+  // is a pass-through line, audited separately via tax_status).
+  result.expected_total = roundCents(expected_wc + surchargeExpectedTotal + (line.total_tax ?? 0));
+  result.delta = roundCents((line.charged_amount ?? 0) - (result.expected_total ?? 0));
+  result.tax_delta = 0;
+  result.tax_status = "passthrough";
+
+  // Line-level status: pick the worst across WC + surcharge.
+  const priority: AuditStatus[] = ["over", "under", "cascade", "unresolved", "ok"];
+  const rowStatuses: AuditStatus[] = [wcStatus, ...expectedSurcharges.map((s) => s.status)];
+  let chosen: AuditStatus = "ok";
+  for (const p of priority) if (rowStatuses.includes(p)) { chosen = p; break; }
+  if (chosen === "ok" && Math.abs(result.delta) > 0.05) chosen = result.delta > 0 ? "over" : "under";
+  result.status = chosen;
 
   if (wcStatus === "over") notes.push(`WC overcharged by €${wcDelta.toFixed(2)}`);
   else if (wcStatus === "under") notes.push(`WC undercharged by €${Math.abs(wcDelta).toFixed(2)}`);
