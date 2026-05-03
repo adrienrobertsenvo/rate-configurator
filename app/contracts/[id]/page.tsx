@@ -8,12 +8,13 @@ export const dynamic = "force-dynamic";
 
 interface Params {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ extracted?: string; customer?: string }>;
+  searchParams: Promise<{ extracted?: string; customer?: string; carrier?: string }>;
 }
 
 export default async function ContractPage({ params, searchParams }: Params) {
   const { id } = await params;
-  const { extracted, customer: customerParam } = await searchParams;
+  const { extracted, customer: customerParam, carrier: carrierParam } = await searchParams;
+  const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const contractId = Number(id);
   if (!Number.isFinite(contractId)) notFound();
 
@@ -37,7 +38,7 @@ export default async function ContractPage({ params, searchParams }: Params) {
 
   return (
     <>
-      <Nav active="contracts" customer={customerParam ?? null} />
+      <Nav active="contracts" customer={customerParam ?? null} carrier={carrierForNav} />
       {extracted && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-900">
           <strong>Extracted — please verify.</strong> Low-confidence cells are highlighted in the grid. Fix any

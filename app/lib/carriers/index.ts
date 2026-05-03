@@ -10,6 +10,7 @@
 
 import type { CarrierEngine } from "./types";
 import { dhlExpress } from "./dhl-express";
+import { ups } from "./ups";
 
 // Every Contract.carrier value the audit pipeline might see. The values are
 // historical — DHL contracts came in with country-suffixed codes; lower-case
@@ -20,6 +21,11 @@ const REGISTRY: Record<string, CarrierEngine> = {
   "DHL-EXPRESS-GB": dhlExpress,
   "DHL-EXPRESS-FR": dhlExpress,
   "dhl-express":    dhlExpress,
+
+  "UPS-DE": ups,
+  "UPS-GB": ups,
+  "UPS-FR": ups,
+  "ups":    ups,
 };
 
 // Resolve a carrier code to its engine. Falls back to DHL Express for unknown

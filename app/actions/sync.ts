@@ -1,6 +1,6 @@
 "use server";
 
-import { syncDemandSurcharge, type SyncReport } from "../lib/sync-demand-surcharge";
+import { syncDemandSurcharge, type SyncReport } from "../lib/carriers/dhl-express/sync-demand-surcharge";
 
 // Server-action entry point for the on-demand "Sync external surcharges"
 // button on the Rules page. Returns a structured report; the client renders

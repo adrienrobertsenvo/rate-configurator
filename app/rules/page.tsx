@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { Nav } from "../components/Nav";
 import { db } from "../lib/db";
-import { FUEL_RATES, type FuelClass } from "../lib/fuel-rates";
-import { SURCHARGES } from "../lib/surcharge-meta";
+import { FUEL_RATES, type FuelClass } from "../lib/carriers/dhl-express/fuel-rates";
+import { SURCHARGES } from "../lib/carriers/dhl-express/surcharge-meta";
+import { UPS_FUEL_RATES, type UpsFuelClass } from "../lib/carriers/ups/fuel-rates";
+import { SURCHARGES as UPS_SURCHARGES } from "../lib/carriers/ups/surcharge-meta";
 import { SyncSurchargesButton } from "../components/SyncSurchargesButton";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +19,30 @@ async function loadWorkedExample() {
   return line;
 }
 
-export default async function RulesPage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
-  const { customer: customerParam } = await searchParams;
+export default async function RulesPage({ searchParams }: { searchParams: Promise<{ customer?: string; carrier?: string }> }) {
+  const { customer: customerParam, carrier: carrierParam } = await searchParams;
+  // The Rules page picks one carrier's documentation to render. With the
+  // global CarrierPicker selecting "all", default to DHL since that's the
+  // baseline. The picker is what swaps content here, not local tabs.
+  const carrier: "dhl" | "ups" = carrierParam === "ups" ? "ups" : "dhl";
+  const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const example = await loadWorkedExample();
   return (
     <>
-      <Nav active="rules" customer={customerParam ?? null} />
+      <Nav active="rules" customer={customerParam ?? null} carrier={carrierForNav} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-4xl mx-auto prose prose-sm prose-slate">
+          {carrier === "ups" && <UpsRulesSection />}
+          {carrier === "dhl" && <DhlRulesSection example={example} />}
+        </div>
+      </main>
+    </>
+  );
+}
+
+function DhlRulesSection({ example }: { example: Awaited<ReturnType<typeof loadWorkedExample>> }) {
+  return (
+    <>
           <h1 className="text-xl font-semibold mb-1">DHL Express Germany — Pricing Rule Set</h1>
           <p className="text-sm text-gray-600">
             How an invoice line is built, derived from DHL&rsquo;s published pages and validated against ~7,000
@@ -233,8 +252,6 @@ Total (incl. VAT)   = Total (excl. VAT) × (1 + tax_rate(tax_code))`}</pre>
             ratecard (#1), UK Customs Standard (#11), and the GB/FR/DE-economy ZoneMaps. Visible across all
             customer scopes; tagged with a <code>global</code> pill in the UI to make their special status obvious.
           </p>
-        </div>
-      </main>
     </>
   );
 }
@@ -286,6 +303,212 @@ function WorkedExample({ line }: { line: ExampleLine }) {
           {line.tax_code && line.total_tax != null && (
             <tr><td>VAT ({line.tax_code})</td><td className="text-right">€{line.total_tax.toFixed(2)}</td></tr>
           )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// =====================================================================
+// UPS rules — narrative + reference tables. Same structure as the DHL
+// section so the two are easy to compare. Anything that's "DERIVED" (not
+// from the contract document) is called out so a reviewer can spot-check.
+// =====================================================================
+function UpsRulesSection() {
+  return (
+    <>
+      <h1 className="text-xl font-semibold mb-1">UPS Germany — Pricing Rule Set</h1>
+      <p className="text-sm text-gray-600">
+        How a UPS invoice line is built, derived from UPS&rsquo;s published Fuel Surcharge page,
+        the &ldquo;Forwarding Data Dictionary V5&rdquo; CSV format spec, the contract XLSX rate
+        cards (everstox + Thomann had them, Quivo was PDF-only), and ~40,000 real
+        invoice lines (everstox / Quivo / Thomann). Currency is EUR. Weights in kg unless noted.
+      </p>
+
+      <h2 className="mt-6 text-base font-semibold">1. The formula in one line</h2>
+      <pre className="bg-gray-900 text-gray-100 text-xs p-3 rounded overflow-auto">{`Total per shipment =
+    Weight Charge (FRT)        ← rate-band lookup by (sub-product, zone, weight)
+  + Σ accessorials (ACC)        ← contract Surcharge rules per code
+  + Fuel Surcharge (FSC)        ← published_rate × fuel_multiplier × (WC + Σ fuelable accessorials)
+  + Pass-through (TAX)          ← VAT, audited as passthrough — engine doesn't price it
+
+UPS bills tax as a separate row in the same CSV; INF and EXM rows are informational/exemption metadata, never billed.
+MSC rows (Daily/Weekly Service Fee, late-payment) belong to the invoice as a whole, surfaced as a synthetic "INV" pseudo-shipment.`}</pre>
+
+      <h2 className="mt-6 text-base font-semibold">2. CSV format — what makes UPS different from DHL</h2>
+      <ul className="text-sm">
+        <li><b>No header row.</b> Every row is data; column positions are fixed per UPS&rsquo;s &ldquo;Forwarding Data Dictionary V5&rdquo;.</li>
+        <li><b>Row-per-CHARGE, not row-per-shipment.</b> A single shipment can produce 5–10 rows (FRT + ACC + FSC + TAX + INF), each with its own Net Amount. The parser groups by Tracking Number (col 21) to reconstruct the shipment.</li>
+        <li><b>Latin-1 encoded.</b> German umlauts (&ldquo;Treibstoffzuschl&auml;ge&rdquo;) decode as mojibake under UTF-8. The parser decodes via <code>TextDecoder(&quot;latin1&quot;)</code>.</li>
+        <li><b>Account numbers are 10-char alphanumeric with leading zeros</b> on the wire (<code>00000FV384</code>) but the user-facing UI form is 6-char (<code>0FV384</code>). <code>normalizeUpsAccount</code> strips leading zeros so both round-trip.</li>
+        <li>Pricing columns at the row level: col 49 <code>Basis Value</code> (the base the charge is computed against — for FSC = freight base, for EVS = declared value), col 52 <code>Incentive Amount</code> (list/published rate), col 53 <code>Net Amount</code> (the actual billed amount). The audit compares against col 53.</li>
+      </ul>
+
+      <h2 className="mt-6 text-base font-semibold">3. Service codes (col 45 on FRT rows)</h2>
+      <ul className="text-sm">
+        <li><b>003</b> — UPS Domestic Standard (German &ldquo;Dom. Standard&rdquo;) · GROUND fuel class</li>
+        <li><b>011</b> — UPS Standard (intra-Europe ground &ldquo;TB Standard&rdquo;) · GROUND</li>
+        <li><b>007</b> — UPS Worldwide Express · AIR</li>
+        <li><b>069</b> — UPS Worldwide Express Saver · AIR</li>
+        <li><b>054</b> — UPS Worldwide Express Plus · AIR</li>
+        <li><b>008</b> — UPS Worldwide Expedited · AIR</li>
+        <li><b>066</b> — UPS Worldwide Express Freight · AIR</li>
+        <li><b>017 / 072</b> — UPS Worldwide Economy DDU / DDP · AIR</li>
+        <li><b>021</b> — UPS Economy · AIR</li>
+        <li><b>074</b> — UPS Express 12:00 · AIR</li>
+      </ul>
+
+      <h2 className="mt-6 text-base font-semibold">4. Surcharge codes (col 45 on ACC rows)</h2>
+      <table className="w-full text-xs border border-gray-200 mt-1">
+        <thead className="bg-gray-50 text-left">
+          <tr><th className="px-2 py-1">Code</th><th className="px-2 py-1">Name</th><th className="px-2 py-1">Kind</th><th className="px-2 py-1 text-center">Fuelable?</th></tr>
+        </thead>
+        <tbody>
+          {UPS_SURCHARGES.map((s) => (
+            <tr key={s.code} className="border-t">
+              <td className="px-2 py-1 font-mono">{s.code}</td>
+              <td className="px-2 py-1">{s.name}</td>
+              <td className="px-2 py-1 font-mono">{s.kind}</td>
+              <td className="px-2 py-1 text-center">{s.fuelable ? "✓" : ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h2 className="mt-6 text-base font-semibold">5. Fuel surcharge — published rates × per-customer multiplier</h2>
+      <p className="text-sm">
+        UPS publishes a single fuel-surcharge schedule (weekly, AIR vs GROUND); each contract
+        negotiates a discount captured as <code>Contract.fuel_multiplier</code>. The audit then computes
+        <code> expected_FSC = (WC + Σ fuelable accessorials) × published_rate × fuel_multiplier</code>.
+        That&rsquo;s why the same row of <code>fuel-rates.ts</code> gives different expected dollar amounts per customer.
+      </p>
+      <p className="text-sm">
+        <b>Fuelable list</b>: RES (Residential), PFR/PFC (Surge Fee), ESD (Extended Area Delivery),
+        LTG (Lithium Battery Ground), PIF (Prohibited Items). Per UPS&rsquo;s page: &ldquo;Fuel surcharges apply to
+        Saturday Delivery, Extended/Remote Area, Residential, Large Package, Additional Handling,
+        Over Maximum Limits, Peak Surcharges&rdquo; — we match those to UPS&rsquo;s 3-letter codes above.
+      </p>
+      <h3 className="text-sm font-semibold mt-3">Published rate tables (read from ups.com via PDF on 2026-05-03)</h3>
+      <div className="grid grid-cols-2 gap-4 not-prose">
+        <UpsFuelTable klass="GROUND" />
+        <UpsFuelTable klass="AIR" />
+      </div>
+      <p className="text-sm mt-2">
+        Pre-2026-02-09 rates are <span className="bg-amber-100 px-1 rounded text-amber-900">[derived]</span> placeholders
+        — UPS&rsquo;s page only retains a rolling 90 days, so older invoices fall back to a back-fitted estimate.
+        When you re-audit older shipments, expect some FSC slippage until those weeks are confirmed against
+        archived UPS announcements.
+      </p>
+
+      <h2 className="mt-6 text-base font-semibold">6. Engineering notes &amp; assumptions</h2>
+
+      <h3 className="mt-4 text-sm font-semibold">Multi-piece &amp; direction routing</h3>
+      <p className="text-sm">
+        UPS contracts carry several rate cards per service:
+        <code>Standard Single</code> vs <code>Standard Multi</code> (single vs multi-piece pricing),
+        <code>(Export)</code> vs <code>(Import)</code>. The engine ranks candidate sub-products by (a) direction
+        match — origin country vs <code>Contract.billing_country</code> — and (b) <code>package_quantity &gt; 1</code> for Multi.
+        Most-specific match wins.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">Per-customer fuel multipliers — derived from real billings</h3>
+      <p className="text-sm">
+        UPS contracts often state &ldquo;X% off fuel surcharge&rdquo; as a percentage discount.
+        For everstox, the LLM extractor caught it directly (&ldquo;20% off across all services&rdquo; → multiplier <code>0.80</code>).
+        For Quivo and Thomann, the discount wasn&rsquo;t in the LLM-extracted text, so we{" "}
+        <span className="bg-amber-100 px-1 rounded text-amber-900">[derived]</span>{" "}
+        the multiplier empirically: median(implied_rate / published_rate) across hundreds of FSC lines.
+        Result: Quivo <code>0.25</code> (75% off, 1,848 samples), Thomann <code>0.10</code> (90% off, 18,851 samples).
+        Run <code>scripts/derive_ups_fuel_rates.ts</code> any time to refresh the median against current data.
+        Spot-check against the signed contract whenever possible — the multiplier carries 90% of the
+        FSC audit accuracy, so getting it right matters.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">Cascade detection on FSC</h3>
+      <p className="text-sm">
+        Same idea as DHL&rsquo;s FF cascade: when the carrier-implied FSC rate matches{" "}
+        <code>published × multiplier</code> within ±0.5pp <em>but</em> the upstream WC is wrong, the FSC row is
+        marked <code>cascade</code> rather than over/under. Avoids screaming &ldquo;wrong fuel&rdquo; when the fuel was
+        applied correctly to the wrong base.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">Lane-specific zone rates — known limitation (Thomann)</h3>
+      <p className="text-sm">
+        Some UPS rate sheets carry <em>multiple</em> &ldquo;Zone 3&rdquo; columns, one per destination lane (BE/NL,
+        DK, FR, LU, AT, PL, CZ in Thomann&rsquo;s case). The deterministic XLSX parser currently keeps the
+        FIRST &ldquo;Zone 3&rdquo; only and the audit picks that. Result: Thomann shipments to AT
+        ({"-€7.59 expected vs €9.24 if read as BE/NL"}) audit as &ldquo;under&rdquo; even though
+        UPS billed correctly. To fix, store zone+lane as a composite key and route by destination
+        country at audit time.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">German decimal commas in XLSX</h3>
+      <p className="text-sm">
+        Thomann&rsquo;s rate cells are stored as STRINGS like <code>&quot;5,66&quot;</code> (not numbers). The naive parser
+        stripped commas as thousand-separators, producing &euro;566 instead of &euro;5.66 — which made
+        rate cards look insane. <code>asNumber</code> in <code>extract-rates-xlsx.ts</code> now distinguishes:
+        comma after dot = US thousand sep; comma alone with 1–2 trailing digits = German decimal.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">Quivo contract bands — re-extracted manually</h3>
+      <p className="text-sm">
+        The first LLM extraction of Quivo&rsquo;s contract PDF returned <em>0 bands</em> for the &ldquo;Standard&rdquo;
+        product (the one Quivo bills almost exclusively). <code>scripts/reextract_quivo_standard.ts</code>
+        re-runs only that product with a sharpened prompt, gets ~180 bands (Einzelpaket /
+        Mehrpaket Frei Haus / Mehrpaket Rechnung Dritte). Quivo has no XLSX so deterministic
+        extraction isn&rsquo;t an option — the LLM is the only source.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">UPS doesn&rsquo;t need ZoneMaps for audit (but populates them anyway for visibility)</h3>
+      <p className="text-sm">
+        Unlike DHL, UPS invoices ship the zone for every shipment (CSV col 34). The audit just
+        compares that zone to the contract&rsquo;s rate-card zones — no country&rarr;zone lookup needed at audit
+        time. We <em>do</em> populate ZoneMap rows for UPS so the /zones page shows country lists, but the
+        engine doesn&rsquo;t consult them.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">Account-number routing</h3>
+      <p className="text-sm">
+        Same as DHL: <code>Contract.account_numbers</code> holds a JSON list. UPS account numbers are
+        alphanumeric (<code>0FV384</code>, <code>823289</code>, <code>H9R702</code>). The CSV pads to 10 chars
+        with leading zeros; we strip those before matching.
+      </p>
+
+      <h3 className="mt-4 text-sm font-semibold">Service guide PDFs are too big for the LLM (Thomann)</h3>
+      <p className="text-sm">
+        Thomann&rsquo;s contract bundle includes a 27 MB UPS service-guide PDF that exceeds Anthropic&rsquo;s
+        request size. <code>scripts/upload_ups_thomann.ts</code> sidesteps this by extracting only
+        the small &ldquo;Accessorials&rdquo; sheet of the price-list XLSX for the LLM (surcharges) and using
+        the deterministic XLSX parser for rate bands.
+      </p>
+    </>
+  );
+}
+
+function UpsFuelTable({ klass }: { klass: UpsFuelClass }) {
+  const rows = UPS_FUEL_RATES[klass];
+  return (
+    <div>
+      <h4 className="font-medium text-xs">{klass} — {klass === "AIR" ? "Express + Expedited" : "Standard / Dom. Standard"}</h4>
+      <table className="w-full text-xs border border-gray-200 mt-1">
+        <thead className="bg-gray-50 text-left">
+          <tr><th className="px-2 py-0.5">Effective</th><th className="px-2 py-0.5 text-right">Rate</th><th className="px-2 py-0.5">Source</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const derived = /derived|extrapolated|placeholder|sample/i.test(r.source);
+            return (
+              <tr key={r.effective_from} className="border-t">
+                <td className="px-2 py-0.5 font-mono">{r.effective_from}</td>
+                <td className="px-2 py-0.5 font-mono text-right">{(r.rate * 100).toFixed(2)}%</td>
+                <td className="px-2 py-0.5 text-[10px]">
+                  {derived
+                    ? <span className="bg-amber-100 px-1 rounded text-amber-900">[derived] {r.source.slice(0, 40)}</span>
+                    : <span className="text-gray-500">{r.source.slice(0, 40)}</span>}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

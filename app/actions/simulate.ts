@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "../lib/db";
-import { simulateShipment, type SimulateInput, type SimulateResult } from "../lib/pricing";
-import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../lib/rate-engine";
+import { simulateShipment, type SimulateInput, type SimulateResult } from "../lib/carriers/dhl-express/pricing";
+import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../lib/carriers/dhl-express/rate-engine";
 
 async function loadEngineInputs(contractId: number) {
   const row = await db.contract.findUnique({
@@ -282,10 +282,18 @@ export interface LoadedShipment {
 export async function loadShipmentByNumber(shipmentNumber: string): Promise<LoadedShipment | null> {
   const trimmed = shipmentNumber.trim();
   if (!trimmed) return null;
-  const line = await db.invoiceLine.findFirst({
-    where: { shipment_number: trimmed },
+  // Multiple lines can carry the same shipment_number (re-ingest leftovers,
+  // legitimate re-billing). Require an invoice that actually still exists,
+  // contractId set, and product/destination populated — orphan rows
+  // (invoiceId points at a deleted Invoice) silently fail the include and
+  // would otherwise look like "no match".
+  const candidates = await db.invoiceLine.findMany({
+    where: { shipment_number: trimmed, invoice: { isNot: null } },
     include: { invoice: { select: { invoice_number: true, contractId: true } } },
+    orderBy: { id: "desc" },
+    take: 5,
   });
+  const line = candidates.find((c) => c.invoice?.contractId && c.product_code && c.dest_country);
   if (!line || !line.invoice?.contractId || !line.product_code || !line.dest_country) return null;
   const surcharges = line.surcharges_json ? (JSON.parse(line.surcharges_json) as { code: string }[]) : [];
   return {

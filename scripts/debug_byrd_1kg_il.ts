@@ -1,7 +1,7 @@
 // Debug why simulator returns €23.97 for S DE→IL 1kg under Byrd contract.
 import { db } from "../app/lib/db";
-import { simulateShipment } from "../app/lib/pricing";
-import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../app/lib/rate-engine";
+import { simulateShipment } from "../app/lib/carriers/dhl-express/pricing";
+import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../app/lib/carriers/dhl-express/rate-engine";
 
 async function main() {
   const row = await db.contract.findUniqueOrThrow({

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import type { SurchargeDTO } from "../lib/types";
 import { addAddon, removeAddon, updateAddon } from "../actions/contract";
-import { SURCHARGES } from "../lib/surcharge-meta";
+import { SURCHARGES } from "../lib/carriers/dhl-express/surcharge-meta";
 
 const KINDS = ["flat", "per_kg", "per_shipment", "percent", "percent_of_value", "percent_of_taxes"] as const;
 type Kind = (typeof KINDS)[number];

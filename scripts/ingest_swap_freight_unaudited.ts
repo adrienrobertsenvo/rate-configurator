@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { db } from "../app/lib/db";
-import { parseDhlInvoiceCsv } from "../app/lib/invoice-parse";
+import { parseDhlInvoiceCsv } from "../app/lib/carriers/dhl-express/invoice-parse";
 
 const SWAP_CUSTOMER_CODE = "swap";
 const SWAP_FREIGHT_GLOBS = [

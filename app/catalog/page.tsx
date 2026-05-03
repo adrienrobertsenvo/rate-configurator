@@ -2,13 +2,19 @@ import { db } from "../lib/db";
 import { ensureSeed } from "../lib/seed";
 import { CatalogEditor } from "../components/CatalogEditor";
 import { Nav } from "../components/Nav";
+import { resolveCarrier, contractCarrierWhere } from "../lib/carrier-context";
 
 export const dynamic = "force-dynamic";
 
-export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
+export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ customer?: string; carrier?: string }> }) {
   await ensureSeed();
-  const { customer: customerParam } = await searchParams;
+  const { customer: customerParam, carrier: carrierParam } = await searchParams;
+  const carrierFilter = resolveCarrier(carrierParam);
+  // Pick the first contract that matches the carrier filter — it drives the
+  // catalog scope. With no filter this is the first DHL contract (current
+  // behavior); with `?carrier=ups` it's the first UPS one.
   const contract = await db.contract.findFirst({
+    where: contractCarrierWhere(carrierFilter),
     orderBy: { id: "asc" },
     include: { freight: { include: { sub_products: true } } },
   });
@@ -26,7 +32,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <Nav active="catalog" customer={customerParam ?? null} />
+      <Nav active="catalog" customer={customerParam ?? null} carrier={carrierFilter} />
       <main className="flex-1 overflow-auto">
         <CatalogEditor
           carrier={carrier}

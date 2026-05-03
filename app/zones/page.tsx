@@ -3,18 +3,21 @@ import { db } from "../lib/db";
 import { ensureSeed } from "../lib/seed";
 import { ZoneEditor } from "../components/ZoneEditor";
 import { Nav } from "../components/Nav";
+import { resolveCarrier, directCarrierWhere } from "../lib/carrier-context";
 
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ id?: string; group?: string; contract?: string; customer?: string }>;
+  searchParams: Promise<{ id?: string; group?: string; contract?: string; customer?: string; carrier?: string }>;
 }
 
 export default async function ZonesPage({ searchParams }: Props) {
   await ensureSeed();
-  const { id: idParam, group: groupParam, contract: contractParam, customer: customerParam } = await searchParams;
+  const { id: idParam, group: groupParam, contract: contractParam, customer: customerParam, carrier: carrierParam } = await searchParams;
+  const carrier = resolveCarrier(carrierParam);
 
   const allMaps = await db.zoneMap.findMany({
+    where: directCarrierWhere(carrier),
     include: { countries: true, contract: { select: { id: true, name: true } } },
     orderBy: [{ carrier: "asc" }, { billing_country: "asc" }, { zone_group: "asc" }, { contractId: "asc" }],
   });
@@ -63,7 +66,7 @@ export default async function ZonesPage({ searchParams }: Props) {
 
   return (
     <>
-      <Nav active="zones" customer={customerParam ?? null} />
+      <Nav active="zones" customer={customerParam ?? null} carrier={carrier} />
       <main className="flex-1 overflow-auto">
         <div className="flex">
           <aside className="w-64 border-r bg-white min-h-[calc(100vh-56px)]">

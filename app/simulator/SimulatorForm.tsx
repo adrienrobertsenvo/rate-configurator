@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { runSimulation, loadShipmentByNumber, type SimulateResponse } from "../actions/simulate";
-import { SURCHARGES, SURCHARGE_BY_CODE, isFuelable } from "../lib/surcharge-meta";
-import { FUEL_RATES, isoWeekFromDate, lookupFuelRate, fuelClassForProduct, type FuelClass } from "../lib/fuel-rates";
+import { SURCHARGES, SURCHARGE_BY_CODE, isFuelable } from "../lib/carriers/dhl-express/surcharge-meta";
+import { FUEL_RATES, isoWeekFromDate, lookupFuelRate, fuelClassForProduct, type FuelClass } from "../lib/carriers/dhl-express/fuel-rates";
 
 export type ContractInfo = {
   id: number;

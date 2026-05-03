@@ -39,6 +39,17 @@ model Contract {
   // contract. 1.0 = no override (default). Refurbed contracts have "50% off
   // prevailing fuel" → 0.5. Letters: expected_FF = published_rate × multiplier × base.
   fuel_multiplier    Float            @default(1.0)
+  // Provenance for fuel_multiplier — important when the value didn't come
+  // straight from the contract document. "contract" = read from the signed
+  // contract terms; "derived" = back-fitted from real billings (FSC / base
+  // / published_rate). Surface this in the UI with a "derived" badge so a
+  // reviewer knows to spot-check it against the actual contract text when
+  // possible.
+  fuel_multiplier_source String?     @default("contract")
+  // Free-text operator notes for things that don't fit elsewhere — extraction
+  // gaps, derived values, manual adjustments, anything a future reviewer
+  // should know about this contract.
+  notes              String?
   // DHL billing-account numbers this contract covers, JSON array of strings
   // (e.g. ["143224343","953638253"]). Used by the invoice importer to route
   // CSVs to the right contract — account number is a stricter match than the

@@ -3,18 +3,11 @@
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { db } from "../lib/db";
-import { parseDhlInvoiceCsv, type ParsedShipmentRow } from "../lib/invoice-parse";
-import {
-  computeLine,
-  computeCustomsLine,
-  type ContractSnapshot,
-  type Catalog,
-  type ZoneMaps,
-  type Band,
-  type EngineResult,
-  type TaxTable,
-  type CatalogEntry,
-} from "../lib/rate-engine";
+import { getCarrier, type ParsedShipmentRow, type ContractSnapshot, type Catalog, type ZoneMaps, type TaxTable } from "../lib/carriers";
+// Band + CatalogEntry are loader-internal types (used to shape the snapshot we
+// pass into the carrier engine). They live in DHL Express today; once a second
+// carrier needs different shapes, hoist them to carriers/types.ts.
+import type { Band, CatalogEntry, EngineResult } from "../lib/carriers/dhl-express/rate-engine";
 
 async function loadContractSnapshot(contractId: number): Promise<{ snapshot: ContractSnapshot; carrier: string }> {
   const row = await db.contract.findUnique({
@@ -115,9 +108,10 @@ export async function uploadInvoice(formData: FormData): Promise<{ invoiceId: nu
 
   const buf = Buffer.from(await file.arrayBuffer());
   const text = buf.toString("utf8");
-  const parsed = parseDhlInvoiceCsv(text);
-
   const { snapshot, carrier } = await loadContractSnapshot(contractId);
+  const engine = getCarrier(carrier);
+  const parsed = engine.parseInvoiceCsv(text);
+
   const { zoneMaps, catalog, tax } = await loadLookups(carrier, snapshot.billing_country, contractId);
 
   const sourceSha = createHash("sha256").update(buf).digest("hex");
@@ -176,8 +170,8 @@ export async function uploadInvoice(formData: FormData): Promise<{ invoiceId: nu
   for (const line of parsed.lines) {
     // Customs invoices use a separate audit path — they have no product/zone/weight.
     const audit = parsed.invoice_type === "customs"
-      ? computeCustomsLine(line, snapshot)
-      : computeLine(line, snapshot, catalog, zoneMaps, tax);
+      ? engine.computeCustomsLine(line, snapshot)
+      : engine.computeLine(line, snapshot, catalog, zoneMaps, tax);
     await db.invoiceLine.create({
       data: buildLineRow(invoice.id, line, audit),
     });
@@ -236,6 +230,7 @@ export async function rerunAudit(invoiceId: number) {
   if (!invoice || !invoice.contract) throw new Error("Invoice or contract not found");
 
   const { snapshot, carrier } = await loadContractSnapshot(invoice.contract.id);
+  const engine = getCarrier(carrier);
   const { zoneMaps, catalog, tax } = await loadLookups(carrier, snapshot.billing_country, invoice.contract.id);
   const isCustoms = invoice.invoice_type === "customs";
 
@@ -257,8 +252,8 @@ export async function rerunAudit(invoiceId: number) {
       total_tax: l.total_tax,
     };
     const audit = isCustoms
-      ? computeCustomsLine(shipment, snapshot)
-      : computeLine(shipment, snapshot, catalog, zoneMaps, tax);
+      ? engine.computeCustomsLine(shipment, snapshot)
+      : engine.computeLine(shipment, snapshot, catalog, zoneMaps, tax);
     await db.invoiceLine.update({
       where: { id: l.id },
       data: {

@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { db } from "../lib/db";
-import { extractContract, type ExtractedContract, type SourceFile, type SourceKind } from "../lib/extract";
+import { extractContract, type ExtractedContract, type SourceFile, type SourceKind } from "../lib/carriers/dhl-express/extract";
 
 function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

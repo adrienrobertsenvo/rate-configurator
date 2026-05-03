@@ -5,11 +5,11 @@
 import { readFileSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import { db } from "../app/lib/db";
-import { parseDhlInvoiceCsv } from "../app/lib/invoice-parse";
+import { parseDhlInvoiceCsv } from "../app/lib/carriers/dhl-express/invoice-parse";
 import {
   computeCustomsLine,
   type ContractSnapshot,
-} from "../app/lib/rate-engine";
+} from "../app/lib/carriers/dhl-express/rate-engine";
 
 const CONTRACT_ID = 11;
 const SOURCE_GLOB = "/tmp/dhl-uk/AVB*.csv";

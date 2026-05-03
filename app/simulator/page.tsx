@@ -2,15 +2,17 @@ import { db } from "../lib/db";
 import { Nav } from "../components/Nav";
 import { SimulatorForm } from "./SimulatorForm";
 import { resolveCustomer, contractCustomerWhere } from "../lib/customer-context";
+import { resolveCarrier, contractCarrierWhere } from "../lib/carrier-context";
 
 export const dynamic = "force-dynamic";
 
-export default async function SimulatorPage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
-  const { customer: customerParam } = await searchParams;
+export default async function SimulatorPage({ searchParams }: { searchParams: Promise<{ customer?: string; carrier?: string }> }) {
+  const { customer: customerParam, carrier: carrierParam } = await searchParams;
   const customer = await resolveCustomer(customerParam);
+  const carrier = resolveCarrier(carrierParam);
   const [contracts, catalog] = await Promise.all([
     db.contract.findMany({
-      where: contractCustomerWhere(customer?.id ?? null),
+      where: { AND: [contractCustomerWhere(customer?.id ?? null), contractCarrierWhere(carrier)] },
       orderBy: { id: "asc" },
       include: {
         freight: {
@@ -47,7 +49,7 @@ export default async function SimulatorPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <Nav active="simulator" customer={customer?.code ?? null} />
+      <Nav active="simulator" customer={customer?.code ?? null} carrier={carrier} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-lg font-semibold mb-1">Shipment Price Simulator</h1>

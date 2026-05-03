@@ -29,7 +29,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { allDemandSchedules } from "../app/lib/demand-surcharge";
+import { allDemandSchedules } from "../app/lib/carriers/dhl-express/demand-surcharge";
 
 const DEMAND_URL = "https://www.dhl.de/en/geschaeftskunden/express/produkte-und-services/zuschlaege.html#demand-surcharge";
 const FUEL_AIR_URL = "https://www.dhl.de/en/geschaeftskunden/express/produkte-und-services/zuschlaege/treibstoffzuschlag.html"; // EN page

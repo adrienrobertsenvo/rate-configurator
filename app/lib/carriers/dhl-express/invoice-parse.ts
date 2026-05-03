@@ -15,6 +15,16 @@ export interface ParsedShipmentRow {
   surcharges: { code: string; name: string; charge: number }[];
   tax_code: string | null;
   total_tax: number | null;
+  // Carrier-stamped zone, when the invoice CSV ships one. UPS populates this
+  // (column 34 of the billing CSV); DHL doesn't — DHL's audit derives the
+  // zone from destination country at audit time. Optional so downstream code
+  // keeps working for carriers that don't supply it.
+  zone?: string | null;
+  // Number of packages in the shipment. UPS prices Standard differently for
+  // single-piece (Standard Single rate card) vs multi-piece (Standard Multi)
+  // so the audit engine needs this to pick the right card. DHL bills weight-
+  // tier rates regardless of piece count, so this is informational there.
+  package_quantity?: number | null;
 }
 
 export interface ParsedInvoice {

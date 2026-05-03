@@ -3,6 +3,7 @@ import { db } from "../lib/db";
 import { Nav } from "../components/Nav";
 import { CodeMappingTable } from "./CodeMappingTable";
 import { resolveCustomer, contractCustomerWhere } from "../lib/customer-context";
+import { resolveCarrier, viaContractCarrierWhere, carrierPrefixes } from "../lib/carrier-context";
 
 export const dynamic = "force-dynamic";
 
@@ -31,15 +32,22 @@ interface CatalogRow {
   name: string;
 }
 
-export default async function CodeMappingPage({ searchParams }: { searchParams: Promise<{ customer?: string }> }) {
-  const { customer: customerParam } = await searchParams;
+export default async function CodeMappingPage({ searchParams }: { searchParams: Promise<{ customer?: string; carrier?: string }> }) {
+  const { customer: customerParam, carrier: carrierParam } = await searchParams;
   const customer = await resolveCustomer(customerParam);
+  const carrierFilter = resolveCarrier(carrierParam);
   // 1. Pull every audited surcharge entry with status=unresolved, broken down by
   //    (contract, code). For each, count lines and sum the actual charges.
+  // Combine customer + carrier filters via AND on the contract relation.
+  const customerScope = customer ? contractCustomerWhere(customer.id) : null;
+  const carrierScope = viaContractCarrierWhere(carrierFilter);
+  const invoiceWhere = (customerScope || (carrierFilter !== "all"))
+    ? { invoice: { is: { contract: { is: { AND: [customerScope ?? {}, carrierScope.contract ?? {}] } } } } }
+    : {};
   const lines = await db.invoiceLine.findMany({
     where: {
       expected_surcharges_json: { not: null },
-      ...(customer ? { invoice: { is: { contract: { is: contractCustomerWhere(customer.id) } } } } : {}),
+      ...invoiceWhere,
     },
     select: {
       expected_surcharges_json: true,
@@ -109,7 +117,7 @@ export default async function CodeMappingPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <Nav active="code-mapping" customer={customer?.code ?? null} />
+      <Nav active="code-mapping" customer={customer?.code ?? null} carrier={carrierFilter} />
       <main className="flex-1 overflow-auto p-6">
         <div className="max-w-6xl mx-auto space-y-3">
           <h1 className="text-lg font-semibold">Invoice code mapping</h1>
