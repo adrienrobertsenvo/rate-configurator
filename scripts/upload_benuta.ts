@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { db } from "../app/lib/db";
-import { extractContract, type ExtractedContract, type SourceFile } from "../app/lib/extract";
+import { extractContract, type ExtractedContract, type SourceFile } from "../app/lib/carriers/dhl-express/extract";
 
 const FILES: { path: string; kind: "pdf" | "xlsx" | "csv" }[] = [
   { path: "/Users/mariekober/Downloads/Carrier_Preisinformation_2026_DHL_Express_1_02.02.26 (1).XLSX", kind: "xlsx" },

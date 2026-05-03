@@ -1,6 +1,6 @@
 import { db } from "../app/lib/db";
-import { computeLine, type ContractSnapshot, type Catalog, type ZoneMaps, type TaxTable, type CatalogEntry, type Band } from "../app/lib/rate-engine";
-import type { ParsedShipmentRow } from "../app/lib/invoice-parse";
+import { computeLine, type ContractSnapshot, type Catalog, type ZoneMaps, type TaxTable, type CatalogEntry, type Band } from "../app/lib/carriers/dhl-express/rate-engine";
+import type { ParsedShipmentRow } from "../app/lib/carriers/dhl-express/invoice-parse";
 
 async function loadEngineInputs(contractId: number) {
   const row = await db.contract.findUniqueOrThrow({

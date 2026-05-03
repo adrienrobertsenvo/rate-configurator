@@ -3,7 +3,7 @@
 import { db } from "../lib/db";
 import { revalidatePath } from "next/cache";
 import yaml from "js-yaml";
-import { extractZones, type ZoneSourceFile, type ZoneSourceKind } from "../lib/extract-zones";
+import { extractZones, type ZoneSourceFile, type ZoneSourceKind } from "../lib/carriers/dhl-express/extract-zones";
 
 export async function updateZoneMap(id: number, patch: Partial<{
   carrier: string;

@@ -1,6 +1,6 @@
 import { db } from "../app/lib/db";
-import { simulateShipment } from "../app/lib/pricing";
-import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../app/lib/rate-engine";
+import { simulateShipment } from "../app/lib/carriers/dhl-express/pricing";
+import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../app/lib/carriers/dhl-express/rate-engine";
 
 async function loadSnap(contractId: number) {
   const row = await db.contract.findUniqueOrThrow({

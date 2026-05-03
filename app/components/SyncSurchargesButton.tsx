@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { syncExternalSurcharges } from "../actions/sync";
-import type { SyncReport } from "../lib/sync-demand-surcharge";
+import type { SyncReport } from "../lib/carriers/dhl-express/sync-demand-surcharge";
 
 // Click-to-fetch button for the DHL Demand Surcharge sync. Lives on the Rules
 // page next to the demand-surcharge documentation. No auto-apply — surfaces

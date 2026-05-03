@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { db } from "../app/lib/db";
-import { extractContract, type ExtractedContract } from "../app/lib/extract";
+import { extractContract, type ExtractedContract } from "../app/lib/carriers/dhl-express/extract";
 
 const FILES = [
   // DE saved #8, FR saved #9 already; only GB needs to be retried (with bumped max_tokens).

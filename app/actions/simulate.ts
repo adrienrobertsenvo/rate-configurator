@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "../lib/db";
-import { simulateShipment, type SimulateInput, type SimulateResult } from "../lib/pricing";
-import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../lib/rate-engine";
+import { simulateShipment, type SimulateInput, type SimulateResult } from "../lib/carriers/dhl-express/pricing";
+import type { Band, ContractSnapshot, Catalog, ZoneMaps, TaxTable, CatalogEntry } from "../lib/carriers/dhl-express/rate-engine";
 
 async function loadEngineInputs(contractId: number) {
   const row = await db.contract.findUnique({

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useTransition } from "react";
 import { rerunAudit } from "../actions/invoice";
-import { isoWeekFromDate, lookupFuelRate, fuelClassForProduct } from "../lib/fuel-rates";
-import { isFuelable, SURCHARGE_BY_CODE } from "../lib/surcharge-meta";
+import { isoWeekFromDate, lookupFuelRate, fuelClassForProduct } from "../lib/carriers/dhl-express/fuel-rates";
+import { isFuelable, SURCHARGE_BY_CODE } from "../lib/carriers/dhl-express/surcharge-meta";
 import { TAX_CODE_INFO } from "../lib/tax-codes";
 import { ReviewPanel } from "./ReviewPanel";
 import type { ReviewStatus } from "../actions/review";

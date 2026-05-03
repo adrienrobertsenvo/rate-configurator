@@ -3,10 +3,10 @@
 import { readFileSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import { db } from "../app/lib/db";
-import { parseDhlInvoiceCsv } from "../app/lib/invoice-parse";
+import { parseDhlInvoiceCsv } from "../app/lib/carriers/dhl-express/invoice-parse";
 import {
   computeLine, type ContractSnapshot, type Catalog, type ZoneMaps, type TaxTable, type CatalogEntry, type Band,
-} from "../app/lib/rate-engine";
+} from "../app/lib/carriers/dhl-express/rate-engine";
 
 const CONTRACT_ID = 7;
 const SOURCE_GLOB = "/tmp/dhl-archive2/BERR*.csv";

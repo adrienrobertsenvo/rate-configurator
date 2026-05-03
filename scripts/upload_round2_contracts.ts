@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { db } from "../app/lib/db";
-import { extractContract, type ExtractedContract, type SourceFile } from "../app/lib/extract";
+import { extractContract, type ExtractedContract, type SourceFile } from "../app/lib/carriers/dhl-express/extract";
 
 interface Job {
   label: string;

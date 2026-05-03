@@ -1,7 +1,7 @@
 import { Nav } from "../components/Nav";
 import { db } from "../lib/db";
-import { FUEL_RATES, type FuelClass } from "../lib/fuel-rates";
-import { SURCHARGES } from "../lib/surcharge-meta";
+import { FUEL_RATES, type FuelClass } from "../lib/carriers/dhl-express/fuel-rates";
+import { SURCHARGES } from "../lib/carriers/dhl-express/surcharge-meta";
 import { SyncSurchargesButton } from "../components/SyncSurchargesButton";
 
 export const dynamic = "force-dynamic";

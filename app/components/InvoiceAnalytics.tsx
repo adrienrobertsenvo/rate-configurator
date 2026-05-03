@@ -8,7 +8,7 @@
 //   - app/invoices/page.tsx          (cross-invoice scope on the shipment view)
 
 import { Fragment } from "react";
-import { SURCHARGE_BY_CODE } from "../lib/surcharge-meta";
+import { SURCHARGE_BY_CODE } from "../lib/carriers/dhl-express/surcharge-meta";
 import { fmtMoney, fmtMoneySigned, fmtInt } from "../lib/fmt";
 
 const TOL = 0.05;
