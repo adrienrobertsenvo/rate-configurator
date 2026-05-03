@@ -4,7 +4,7 @@
 
 import { fuelClassForProduct, lookupFuelRate, type FuelClass } from "./fuel-rates";
 import { SURCHARGE_BY_CODE, isFuelable } from "./surcharge-meta";
-import { resolveCountryCode } from "./country-aliases";
+import { resolveCountryCode } from "../../country-aliases";
 import type { Catalog, ContractSnapshot, ZoneMaps, TaxTable, MatchedBand, Band } from "./rate-engine";
 
 export interface OptionalSurcharge {
