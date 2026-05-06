@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Customer/account a contract belongs to. Multi-country customers (e.g. Refurbed
