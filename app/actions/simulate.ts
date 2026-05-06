@@ -190,7 +190,7 @@ async function findSimilarShipment(req: SimulateRequest): Promise<{ line: Invoic
   const baseWhere = { dest_country: dest, charged_amount: { gt: 0 } as const };
 
   // Helper: query invoice lines, optionally restricted to the simulator's contract.
-  async function search(where: Parameters<typeof db.invoiceLine.findMany>[0]["where"]) {
+  async function search(where: NonNullable<Parameters<typeof db.invoiceLine.findMany>[0]>["where"]) {
     return db.invoiceLine.findMany({ where, include: INVOICE_LINE_INCLUDE, take: 100 });
   }
 
