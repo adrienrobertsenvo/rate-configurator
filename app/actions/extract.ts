@@ -52,7 +52,7 @@ export async function uploadAndExtractContract(formData: FormData): Promise<{ co
         kind: f.kind,
         size_bytes: f.bytes.byteLength,
         sha256: createHash("sha256").update(f.bytes).digest("hex"),
-        bytes: f.bytes,
+        bytes: new Uint8Array(f.bytes),
       },
     });
   }

@@ -148,7 +148,7 @@ export async function uploadInvoice(formData: FormData): Promise<{ invoiceId: nu
       source_filename: file.name,
       source_size_bytes: buf.byteLength,
       source_sha256: sourceSha,
-      source_bytes: buf,
+      source_bytes: new Uint8Array(buf),
       lines: { deleteMany: {} },
     },
     create: {
@@ -162,7 +162,7 @@ export async function uploadInvoice(formData: FormData): Promise<{ invoiceId: nu
       source_filename: file.name,
       source_size_bytes: buf.byteLength,
       source_sha256: sourceSha,
-      source_bytes: buf,
+      source_bytes: new Uint8Array(buf),
     },
     select: { id: true },
   });
