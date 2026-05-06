@@ -13,7 +13,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!Number.isFinite(sourceId)) return new NextResponse("Bad id", { status: 400 });
   const src = await db.contractSource.findUnique({ where: { id: sourceId } });
   if (!src || !src.bytes) return new NextResponse("Not found", { status: 404 });
-  return new NextResponse(src.bytes as Uint8Array, {
+  return new NextResponse(new Uint8Array(src.bytes), {
     headers: {
       "Content-Type": MIME[src.kind] ?? "application/octet-stream",
       "Content-Disposition": `attachment; filename="${src.filename.replace(/"/g, "")}"`,

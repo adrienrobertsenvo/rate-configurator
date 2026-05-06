@@ -11,7 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
   if (!inv || !inv.source_bytes) return new NextResponse("Original CSV not stored for this invoice", { status: 404 });
   const filename = inv.source_filename ?? `${inv.invoice_number}.csv`;
-  const bytes = inv.source_bytes as Uint8Array;
+  const bytes = new Uint8Array(inv.source_bytes);
   return new NextResponse(bytes, {
     headers: {
       "Content-Type": "text/csv",
