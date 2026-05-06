@@ -15,7 +15,7 @@ interface Props {
 export default async function InvoiceDetail({ params, searchParams }: Props) {
   const { id } = await params;
   const invoiceId = Number(id);
-  if (!Number.isFinite(invoiceId)) notFound();
+  if (!Number.isFinite(invoiceId)) return notFound();
   const { filter, customer: customerParam, product: productParam, surcharge: surchargeParam, carrier: carrierParam } = await searchParams;
   const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const productFilter = (productParam ?? "").trim().toUpperCase() || null;
@@ -41,11 +41,11 @@ export default async function InvoiceDetail({ params, searchParams }: Props) {
       lines: { orderBy: { id: "asc" } },
     },
   });
-  if (!invoice) notFound();
+  if (!invoice) return notFound();
   const sourceFilename = invoice.source_filename;
   const sourceSize = invoice.source_size_bytes;
 
-  function hasCascadeRow(l: typeof invoice.lines[number]): boolean {
+  function hasCascadeRow(l: NonNullable<typeof invoice>["lines"][number]): boolean {
     if (l.tax_status === "cascade") return true;
     if (!l.expected_surcharges_json) return false;
     try {

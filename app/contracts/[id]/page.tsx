@@ -16,7 +16,7 @@ export default async function ContractPage({ params, searchParams }: Params) {
   const { extracted, customer: customerParam, carrier: carrierParam } = await searchParams;
   const carrierForNav: "all" | "dhl" | "ups" = carrierParam === "dhl" || carrierParam === "ups" ? carrierParam : "all";
   const contractId = Number(id);
-  if (!Number.isFinite(contractId)) notFound();
+  if (!Number.isFinite(contractId)) return notFound();
 
   const [row, sources] = await Promise.all([
     db.contract.findUnique({
@@ -32,7 +32,7 @@ export default async function ContractPage({ params, searchParams }: Params) {
       orderBy: { uploadedAt: "asc" },
     }),
   ]);
-  if (!row) notFound();
+  if (!row) return notFound();
 
   const dto = contractToDto(row);
 

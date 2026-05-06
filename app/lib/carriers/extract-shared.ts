@@ -200,7 +200,7 @@ export async function runExtraction(
         "\n\n" + (options?.detailInstruction?.(p.name, subs) ??
           `Extract ONLY the rate tables for the freight product "${p.name}". Expected sub-products: ${subs.map((n) => `"${n}"`).join(", ")}. For each sub-product return zones + bands. Ignore other products. Return structured JSON per the schema.`),
     });
-    stream = client.messages.stream({
+    const detailStream = client.messages.stream({
       model: "claude-opus-4-7",
       max_tokens: 96000,
       thinking: { type: "disabled" },
@@ -208,11 +208,11 @@ export async function runExtraction(
       output_config: { format: (await import("@anthropic-ai/sdk/helpers/zod")).zodOutputFormat(ProductDetailSchema), effort: "low" },
       messages: [{ role: "user", content: detContent }],
     });
-    final = await stream.finalMessage();
-    if (final.stop_reason === "max_tokens") throw new Error(`Rate extraction truncated for "${p.name}".`);
-    textBlock = final.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-    if (!textBlock) throw new Error(`Detail extraction for "${p.name}": no text block (stop_reason=${final.stop_reason})`);
-    return ProductDetailSchema.parse(JSON.parse(textBlock.text));
+    const detailFinal = await detailStream.finalMessage();
+    if (detailFinal.stop_reason === "max_tokens") throw new Error(`Rate extraction truncated for "${p.name}".`);
+    const detailTextBlock = detailFinal.content.find((b): b is Anthropic.TextBlock => b.type === "text");
+    if (!detailTextBlock) throw new Error(`Detail extraction for "${p.name}": no text block (stop_reason=${detailFinal.stop_reason})`);
+    return ProductDetailSchema.parse(JSON.parse(detailTextBlock.text));
   }));
 
   // ---- merge ----

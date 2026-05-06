@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { runSimulation, loadShipmentByNumber, type SimulateResponse } from "../actions/simulate";
 import { SURCHARGES, SURCHARGE_BY_CODE, isFuelable } from "../lib/carriers/dhl-express/surcharge-meta";
 import { FUEL_RATES, isoWeekFromDate, lookupFuelRate, fuelClassForProduct, type FuelClass } from "../lib/carriers/dhl-express/fuel-rates";
+import type { MatchedBand } from "../lib/carriers/dhl-express/rate-engine";
 
 export type ContractInfo = {
   id: number;
@@ -400,7 +401,7 @@ function Step({ step }: { step: Step }) {
   }
 }
 
-function describeBand(b: SimulateResponse["result"]["steps"][number] extends { band: infer B } ? B : never): string {
+function describeBand(b: MatchedBand): string {
   if (!b) return "";
   const start = `${(b.weight_start / 1000).toFixed(2)} kg`;
   if (b.price != null && b.weight_end != null) return `${start} – ${(b.weight_end / 1000).toFixed(2)} kg flat`;

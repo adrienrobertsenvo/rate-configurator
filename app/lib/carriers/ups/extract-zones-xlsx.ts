@@ -101,7 +101,6 @@ const ALIASES = new Map<string, string>(Object.entries({
   "libanon malawi malediven": "LB",
   "marokko mauretanien": "MA",
   "myanmar nepal": "MM",
-  "samoa-inseln amer": "AS",
   "senegal tahiti": "SN",
   "sri lanka surinam": "LK",
   "sambia": "ZM", "simbabwe": "ZW",
