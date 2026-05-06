@@ -288,7 +288,7 @@ export async function loadShipmentByNumber(shipmentNumber: string): Promise<Load
   // (invoiceId points at a deleted Invoice) silently fail the include and
   // would otherwise look like "no match".
   const candidates = await db.invoiceLine.findMany({
-    where: { shipment_number: trimmed, invoice: { isNot: null } },
+    where: { shipment_number: trimmed },
     include: { invoice: { select: { invoice_number: true, contractId: true } } },
     orderBy: { id: "desc" },
     take: 5,

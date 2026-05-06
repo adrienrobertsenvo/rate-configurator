@@ -42,7 +42,7 @@ export default async function CodeMappingPage({ searchParams }: { searchParams: 
   const customerScope = customer ? contractCustomerWhere(customer.id) : null;
   const carrierScope = viaContractCarrierWhere(carrierFilter);
   const invoiceWhere = (customerScope || (carrierFilter !== "all"))
-    ? { invoice: { is: { contract: { is: { AND: [customerScope ?? {}, carrierScope.contract ?? {}] } } } } }
+    ? { invoice: { contract: { AND: [customerScope ?? {}, carrierScope.contract ?? {}] } } }
     : {};
   const lines = await db.invoiceLine.findMany({
     where: {
