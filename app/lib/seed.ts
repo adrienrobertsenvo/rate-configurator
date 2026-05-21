@@ -114,17 +114,53 @@ export async function seedDhlExpressDe() {
     ],
   });
 
+  // Catalog per DHL Express product-code mapping spec.
+  // Each code can have per-direction rows; direction is resolved from origin/dest/billing at audit time.
+  // name_filter (non-empty) = substring match on the invoice's product_name — only used for code H.
   await db.catalogProduct.createMany({
     data: [
-      { carrier: "DHL-EXPRESS-DE", code: "S", product_name: "Express Worldwide Export", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "U", product_name: "Express Worldwide Export", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "E", product_name: "Express Domestic", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "P", product_name: "Express Worldwide Export", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "T", product_name: "Express Worldwide Export", sub_product_name: "Document" },
-      { carrier: "DHL-EXPRESS-DE", code: "V", product_name: "Economy Select Export", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "N", product_name: "Economy Select Export", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "Y", product_name: "Express Worldwide Export", sub_product_name: "Package" },
-      { carrier: "DHL-EXPRESS-DE", code: "Z", product_name: "Duties & Taxes (pass-through)", sub_product_name: "—" },
+      // S — Express Worldwide non-doc outbound (86% EXPORT non-EU)
+      { carrier: "DHL-EXPRESS-DE", code: "S", direction: "export", product_name: "Express Worldwide Export", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "S", direction: "any",    product_name: "Express Worldwide Export", sub_product_name: "Package" },
+      // P — same physical service, inbound perspective (57% IMPORT, 41% EXPORT)
+      { carrier: "DHL-EXPRESS-DE", code: "P", direction: "import", product_name: "Express Worldwide Import", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "P", direction: "export", product_name: "Express Worldwide Export", sub_product_name: "Package" },
+      // U — intra-EU / EU export (58% EXPORT-EU + transit)
+      { carrier: "DHL-EXPRESS-DE", code: "U", direction: "export", product_name: "Express Worldwide Export", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "U", direction: "any",    product_name: "Express Worldwide Export", sub_product_name: "Package" },
+      // D — Worldwide Document (97% TRANSIT)
+      { carrier: "DHL-EXPRESS-DE", code: "D", direction: "any",    product_name: "Express Worldwide Export", sub_product_name: "Document" },
+      // T — Express 12:00 Document (uses base document rate + YK surcharge)
+      { carrier: "DHL-EXPRESS-DE", code: "T", direction: "export", product_name: "Express Worldwide Export", sub_product_name: "Document" },
+      { carrier: "DHL-EXPRESS-DE", code: "T", direction: "any",    product_name: "Express Worldwide Export", sub_product_name: "Document" },
+      // Y — Express 12:00 non-doc (85% IMPORT non-EU; uses base rate + YK surcharge)
+      { carrier: "DHL-EXPRESS-DE", code: "Y", direction: "import", product_name: "Express Worldwide Import", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "Y", direction: "any",    product_name: "Express Worldwide Import", sub_product_name: "Package" },
+      // E — Express Domestic (100% DOMESTIC)
+      { carrier: "DHL-EXPRESS-DE", code: "E", direction: "any",    product_name: "Express Domestic", sub_product_name: "Package" },
+      // N — Economy Select Export (96% EXPORT non-EU; third-country billing routes via "any")
+      { carrier: "DHL-EXPRESS-DE", code: "N", direction: "export", product_name: "Economy Select Export", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "N", direction: "any",    product_name: "Economy Select Export", sub_product_name: "Package" },
+      // V — Economy Select Domestic/Export (98% EXPORT-EU)
+      { carrier: "DHL-EXPRESS-DE", code: "V", direction: "export", product_name: "Economy Select Export", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "V", direction: "any",    product_name: "Economy Select Export", sub_product_name: "Package" },
+      // W — Economy Select Import (50% IMPORT-EU + transit)
+      { carrier: "DHL-EXPRESS-DE", code: "W", direction: "import", product_name: "Economy Select Import", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "W", direction: "any",    product_name: "Economy Select Import", sub_product_name: "Package" },
+      // H — Economy Select Import (79% IMPORT non-EU) OR Express Domestic 9:00 (8 DE→DE shipments).
+      // The 9:00 variant is disambiguated via product_name containing "9:00".
+      { carrier: "DHL-EXPRESS-DE", code: "H", direction: "import", name_filter: "",     product_name: "Economy Select Import", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "H", direction: "export", name_filter: "9:00", product_name: "Express Domestic",       sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "H", direction: "any",    name_filter: "",     product_name: "Economy Select Import", sub_product_name: "Package" },
+      // C — Express Domestic alternative code (swap-commerce DE/GB)
+      { carrier: "DHL-EXPRESS-DE", code: "C", direction: "any",    product_name: "Express Domestic", sub_product_name: "Package" },
+      // L / O — Domestic time-of-day variants (base rate + time-tier surcharge)
+      { carrier: "DHL-EXPRESS-DE", code: "L", direction: "any",    product_name: "Express Domestic", sub_product_name: "Package" },
+      { carrier: "DHL-EXPRESS-DE", code: "O", direction: "any",    product_name: "Express Domestic", sub_product_name: "Package" },
+      // K — Express 9:00 Document (base rate + time-tier surcharge)
+      { carrier: "DHL-EXPRESS-DE", code: "K", direction: "any",    product_name: "Express Worldwide Export", sub_product_name: "Document" },
+      // Z — Duties & Taxes pass-through line
+      { carrier: "DHL-EXPRESS-DE", code: "Z", direction: "any",    product_name: "Duties & Taxes (pass-through)", sub_product_name: "—" },
     ],
   });
 

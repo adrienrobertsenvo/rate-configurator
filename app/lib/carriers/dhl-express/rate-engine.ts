@@ -47,6 +47,9 @@ export interface CatalogEntry {
   product_name: string;
   sub_product_name: string;
   direction: "export" | "import" | "any";
+  // Non-empty = substring that must be present in the invoice's product_name
+  // (case-insensitive) for this entry to match. Used for code H disambiguation.
+  name_filter?: string;
 }
 
 export interface Catalog {
@@ -119,13 +122,30 @@ function resolveDirection(
 function pickCatalogEntry(
   entries: CatalogEntry[] | undefined,
   direction: "export" | "import" | "any",
+  product_name?: string | null,
 ): CatalogEntry | undefined {
   if (!entries || entries.length === 0) return undefined;
-  const exact = entries.find((e) => e.direction === direction);
+
+  const nameNorm = product_name ? product_name.toLowerCase().replace(/\s+/g, " ").trim() : "";
+
+  // Name-filtered entries take priority — try exact direction match first, then "any".
+  if (nameNorm) {
+    const namedExact = entries.find(
+      (e) => e.name_filter && e.direction === direction && nameNorm.includes(e.name_filter.toLowerCase()),
+    );
+    if (namedExact) return namedExact;
+    const namedAny = entries.find(
+      (e) => e.name_filter && e.direction === "any" && nameNorm.includes(e.name_filter.toLowerCase()),
+    );
+    if (namedAny) return namedAny;
+  }
+
+  // Standard direction match on entries without a name_filter.
+  const exact = entries.find((e) => !e.name_filter && e.direction === direction);
   if (exact) return exact;
-  const any = entries.find((e) => e.direction === "any");
+  const any = entries.find((e) => !e.name_filter && e.direction === "any");
   if (any) return any;
-  return entries[0];
+  return entries.find((e) => !e.name_filter) ?? entries[0];
 }
 
 function classifyDelta(delta: number): AuditStatus {
@@ -311,7 +331,7 @@ export function computeLine(
   }
 
   const direction = resolveDirection(contract.billing_country, line.origin_country, line.dest_country);
-  const mapping = pickCatalogEntry(catalog.entries.get(line.product_code), direction);
+  const mapping = pickCatalogEntry(catalog.entries.get(line.product_code), direction, line.product_name);
   if (!mapping) {
     notes.push(`unknown product code '${line.product_code}'`);
     return result;

@@ -41,6 +41,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             product_name: p.product_name,
             sub_product_name: p.sub_product_name,
             direction: p.direction,
+            name_filter: p.name_filter,
           }))}
           surcharges={surcharges.map((s) => ({ code: s.code, name: s.name, kind: s.kind }))}
           taxRates={taxRates.map((t) => ({ code: t.code, rate: t.rate, description: t.description }))}

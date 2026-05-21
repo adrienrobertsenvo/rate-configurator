@@ -34,7 +34,7 @@ async function main() {
     for (const p of products) {
       try {
         await db.catalogProduct.create({
-          data: { carrier, code: p.code, product_name: p.product_name, sub_product_name: p.sub_product_name, direction: p.direction },
+          data: { carrier, code: p.code, product_name: p.product_name, sub_product_name: p.sub_product_name, direction: p.direction, name_filter: p.name_filter },
         });
         pInserted++;
       } catch { pSkipped++; }

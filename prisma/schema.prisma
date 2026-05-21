@@ -188,8 +188,13 @@ model CatalogProduct {
   product_name     String
   sub_product_name String
   direction        String @default("any") // "export" | "import" | "any"
+  // Optional substring to match against the invoice's product_name field — used
+  // for code H disambiguation (Economy Select vs. 9:00 domestic). Empty string
+  // means "match any name". When non-empty, the engine checks that the invoice's
+  // product_name contains this string (case-insensitive) before other entries.
+  name_filter      String @default("")
 
-  @@unique([carrier, code, direction])
+  @@unique([carrier, code, direction, name_filter])
   @@index([carrier])
 }
 

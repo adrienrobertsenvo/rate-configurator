@@ -85,6 +85,7 @@ async function loadLookups(
       product_name: row.product_name,
       sub_product_name: row.sub_product_name,
       direction: (row.direction as "export" | "import" | "any") ?? "any",
+      name_filter: row.name_filter || undefined,
     });
   }
   const surchargeNames = new Map<string, string>();

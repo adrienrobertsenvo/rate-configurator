@@ -76,6 +76,7 @@ async function loadEngineInputs(contractId: number) {
       product_name: cr.product_name,
       sub_product_name: cr.sub_product_name,
       direction: (cr.direction as "export" | "import" | "any") ?? "any",
+      name_filter: cr.name_filter || undefined,
     });
   }
   const surchargeNames = new Map<string, string>();

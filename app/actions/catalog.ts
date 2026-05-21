@@ -9,19 +9,21 @@ export async function addCatalogProduct(entry: {
   product_name: string;
   sub_product_name: string;
   direction?: string;
+  name_filter?: string;
 }) {
   const direction = entry.direction ?? "any";
+  const name_filter = entry.name_filter ?? "";
   await db.catalogProduct.upsert({
-    where: { carrier_code_direction: { carrier: entry.carrier, code: entry.code, direction } },
+    where: { carrier_code_direction_name_filter: { carrier: entry.carrier, code: entry.code, direction, name_filter } },
     update: { product_name: entry.product_name, sub_product_name: entry.sub_product_name },
-    create: { ...entry, direction },
+    create: { carrier: entry.carrier, code: entry.code, product_name: entry.product_name, sub_product_name: entry.sub_product_name, direction, name_filter },
   });
   revalidatePath("/catalog");
 }
 
-export async function removeCatalogProduct(carrier: string, code: string, direction: string) {
+export async function removeCatalogProduct(carrier: string, code: string, direction: string, name_filter = "") {
   await db.catalogProduct.delete({
-    where: { carrier_code_direction: { carrier, code, direction } },
+    where: { carrier_code_direction_name_filter: { carrier, code, direction, name_filter } },
   });
   revalidatePath("/catalog");
 }

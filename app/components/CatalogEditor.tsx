@@ -12,14 +12,14 @@ import {
 
 interface Props {
   carrier: string;
-  products: { code: string; product_name: string; sub_product_name: string; direction: string }[];
+  products: { code: string; product_name: string; sub_product_name: string; direction: string; name_filter: string }[];
   surcharges: { code: string; name: string; kind: string }[];
   taxRates: { code: string; rate: number; description: string | null }[];
   productOptions: { name: string; subs: string[] }[];
 }
 
 export function CatalogEditor({ carrier, products, surcharges, taxRates, productOptions }: Props) {
-  const [pEntry, setPEntry] = useState({ code: "", product_name: "", sub_product_name: "", direction: "any" });
+  const [pEntry, setPEntry] = useState({ code: "", product_name: "", sub_product_name: "", direction: "any", name_filter: "" });
   const [sEntry, setSEntry] = useState({ code: "", name: "", kind: "flat" });
   const [tEntry, setTEntry] = useState({ code: "", rate: "0", description: "" });
   const [pending, start] = useTransition();
@@ -39,6 +39,7 @@ export function CatalogEditor({ carrier, products, surcharges, taxRates, product
             <tr>
               <th className="text-left px-2 py-1 border-b">Code</th>
               <th className="text-left px-2 py-1 border-b">Direction</th>
+              <th className="text-left px-2 py-1 border-b">Name filter</th>
               <th className="text-left px-2 py-1 border-b">Product</th>
               <th className="text-left px-2 py-1 border-b">Sub-product</th>
               <th className="border-b"></th>
@@ -46,15 +47,16 @@ export function CatalogEditor({ carrier, products, surcharges, taxRates, product
           </thead>
           <tbody>
             {products.map((p) => (
-              <tr key={`${p.code}-${p.direction}`} className="even:bg-gray-50">
+              <tr key={`${p.code}-${p.direction}-${p.name_filter}`} className="even:bg-gray-50">
                 <td className="px-2 py-1 border-b font-mono">{p.code}</td>
                 <td className="px-2 py-1 border-b text-xs">{p.direction}</td>
+                <td className="px-2 py-1 border-b font-mono text-xs text-amber-700">{p.name_filter || ""}</td>
                 <td className="px-2 py-1 border-b">{p.product_name}</td>
                 <td className="px-2 py-1 border-b">{p.sub_product_name}</td>
                 <td className="px-2 py-1 border-b">
                   <button
                     className="text-red-600 text-xs hover:underline"
-                    onClick={() => start(async () => { await removeCatalogProduct(carrier, p.code, p.direction); })}
+                    onClick={() => start(async () => { await removeCatalogProduct(carrier, p.code, p.direction, p.name_filter); })}
                   >
                     remove
                   </button>
@@ -80,6 +82,15 @@ export function CatalogEditor({ carrier, products, surcharges, taxRates, product
                   <option value="export">export</option>
                   <option value="import">import</option>
                 </select>
+              </td>
+              <td className="px-2 py-1 border-t">
+                <input
+                  className="w-20 border rounded px-1 py-0.5 font-mono text-xs"
+                  placeholder="9:00"
+                  title="Optional: substring of invoice product_name that must match (e.g. '9:00' for code H disambiguation)"
+                  value={pEntry.name_filter}
+                  onChange={(e) => setPEntry({ ...pEntry, name_filter: e.target.value })}
+                />
               </td>
               <td className="px-2 py-1 border-t">
                 <select
@@ -111,7 +122,7 @@ export function CatalogEditor({ carrier, products, surcharges, taxRates, product
                   disabled={!pEntry.code || !pEntry.product_name || !pEntry.sub_product_name}
                   onClick={() => start(async () => {
                     await addCatalogProduct({ carrier, ...pEntry });
-                    setPEntry({ code: "", product_name: "", sub_product_name: "", direction: "any" });
+                    setPEntry({ code: "", product_name: "", sub_product_name: "", direction: "any", name_filter: "" });
                   })}
                 >
                   add
